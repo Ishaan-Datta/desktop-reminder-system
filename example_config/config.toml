@@ -1,0 +1,20 @@
+# Reminder System Configuration
+# Place icon files (PNG) in this same directory (~/.config/reminder-system/)
+
+# Example: Water break reminder every hour
+[water_break]
+schedule = "0 * * * *"
+icon = "water.png"
+snooze_duration = 300
+
+# Example: Stretch break every 30 minutes during work hours (9am-5pm, Mon-Fri)
+[stretch_break]
+schedule = "*/30 9-17 * * 1-5"
+icon = "stretch.png"
+snooze_duration = 600
+
+# Example: Eye rest every 20 minutes (20-20-20 rule)
+[eye_rest]
+schedule = "*/20 * * * *"
+icon = "eye.png"
+snooze_duration = 120
