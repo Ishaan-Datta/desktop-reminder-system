@@ -30,13 +30,21 @@ class ReminderApp(QObject):
     - System tray icon
     """
     
-    def __init__(self):
+    def __init__(self, config_dir: Optional[Path] = None, enable_tray: bool = True):
+        """
+        Initialize the ReminderApp.
+        
+        Args:
+            config_dir: Optional custom config directory path
+            enable_tray: Whether to enable the system tray icon
+        """
         super().__init__()
         
-        self.config_manager = ConfigManager()
+        self.config_manager = ConfigManager(config_dir)
         self.scheduler = ReminderScheduler()
         self.overlay: Optional[ReminderOverlay] = None
         self.tray_icon: Optional[QSystemTrayIcon] = None
+        self._enable_tray = enable_tray
         
         # Bridge for thread-safe Qt signal emission
         self.trigger = ReminderTrigger()
@@ -48,8 +56,16 @@ class ReminderApp(QObject):
         # Queue for reminders that come while another is showing
         self.reminder_queue: list = []
     
-    def initialize(self) -> bool:
-        """Initialize the application. Returns True on success."""
+    def initialize(self, skip_scheduler: bool = False) -> bool:
+        """
+        Initialize the application.
+        
+        Args:
+            skip_scheduler: If True, don't schedule reminders (useful for testing)
+            
+        Returns:
+            True on success
+        """
         try:
             # Load configuration
             reminders = self.config_manager.load_config()
@@ -67,16 +83,18 @@ class ReminderApp(QObject):
             self.overlay.completed.connect(self._on_reminder_completed)
             self.overlay.snoozed.connect(self._on_reminder_snoozed)
             
-            # Setup system tray
-            self._setup_tray()
+            # Setup system tray (optional)
+            if self._enable_tray:
+                self._setup_tray()
             
-            # Schedule all reminders
-            for name, config in reminders.items():
-                self.scheduler.add_reminder(
-                    name=name,
-                    cron_expression=config.schedule,
-                    callback=self._trigger_reminder_threadsafe
-                )
+            # Schedule all reminders (optional)
+            if not skip_scheduler:
+                for name, config in reminders.items():
+                    self.scheduler.add_reminder(
+                        name=name,
+                        cron_expression=config.schedule,
+                        callback=self._trigger_reminder_threadsafe
+                    )
             
             return True
             
@@ -89,6 +107,52 @@ class ReminderApp(QObject):
         except Exception as e:
             print(f"Error initializing application: {e}")
             return False
+    
+    def initialize_minimal(self, reminders: dict) -> bool:
+        """
+        Initialize with pre-loaded reminder configs (for testing).
+        
+        Args:
+            reminders: Dictionary of name -> ReminderConfig
+            
+        Returns:
+            True on success
+        """
+        self.config_manager.reminders = reminders
+        
+        # Create overlay
+        self.overlay = ReminderOverlay()
+        self.overlay.completed.connect(self._on_reminder_completed)
+        self.overlay.snoozed.connect(self._on_reminder_snoozed)
+        
+        return True
+    
+    def trigger_reminder(self, name: str) -> bool:
+        """
+        Manually trigger a reminder by name.
+        
+        Args:
+            name: The name of the reminder to trigger
+            
+        Returns:
+            True if the reminder was found and triggered
+        """
+        if name not in self.config_manager.reminders:
+            print(f"Unknown reminder: {name}")
+            return False
+        
+        config = self.config_manager.reminders[name]
+        self._show_reminder(config)
+        return True
+    
+    def trigger_reminder_config(self, config: ReminderConfig):
+        """
+        Trigger a reminder with a given config directly.
+        
+        Args:
+            config: The ReminderConfig to display
+        """
+        self._show_reminder(config)
     
     def _setup_tray(self):
         """Set up the system tray icon."""

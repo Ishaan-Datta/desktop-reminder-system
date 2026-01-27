@@ -7,7 +7,7 @@ name = "desktop-reminder-system"
 version = "1.0.0"
 description = "A desktop reminder system with overlay notifications for Linux/KDE Plasma"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Your Name" }]
 classifiers = [
@@ -17,16 +17,13 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = [
-    "PyQt6>=6.4.0",
-    "croniter>=1.3.0",
-    "tomli>=2.0.0;python_version<'3.11'",
-]
+dependencies = ["PyQt6>=6.4.0", "croniter>=1.3.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0"]
 
 [project.scripts]
 reminder-system = "reminder_system.app:main"
@@ -36,3 +33,6 @@ Homepage = "https://github.com/yourusername/desktop-reminder-system"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[dependency-groups]
+dev = ["pytest>=7.0.0"]

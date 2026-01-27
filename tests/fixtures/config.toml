@@ -1,0 +1,12 @@
+# Test Configuration
+# This config is used for testing without modifying ~/.config/reminder-system/
+
+[test_reminder]
+schedule = "* * * * *"
+icon = "test_icon.png"
+snooze_duration = 10
+
+[water_break]
+schedule = "0 * * * *"
+icon = "water.png"
+snooze_duration = 60

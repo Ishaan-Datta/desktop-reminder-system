@@ -10,6 +10,7 @@ A beautiful, non-intrusive desktop reminder overlay application for Linux (KDE P
 - 😴 **Snooze support**: Snooze reminders for a configurable duration
 - 🖼️ **Custom icons**: Use your own PNG icons for each reminder
 - 🔔 **System tray**: Runs quietly in the system tray
+- ❄️ **NixOS support**: Includes Nix flake with uv2nix
 
 ## Screenshots
 
@@ -20,27 +21,83 @@ The overlay appears in the center of your screen with:
 
 ## Installation
 
-### Prerequisites
+### NixOS / Nix (Recommended)
 
-- Python 3.9+
+```bash
+# Enter development shell
+nix develop
+
+# Sync dependencies with uv
+uv sync
+
+# Run the application
+uv run python run.py
+
+# Or run tests
+uv run python -m tests.manual_trigger
+```
+
+#### Home Manager Integration
+
+Add to your `home.nix`:
+
+```nix
+{
+  imports = [
+    (builtins.getFlake "path:/path/to/desktop-reminder-system").homeManagerModules.default
+  ];
+  
+  services.reminder-system = {
+    enable = true;
+    settings = {
+      water_break = {
+        schedule = "0 * * * *";
+        icon = "water.png";
+        snooze_duration = 300;
+      };
+      stretch_break = {
+        schedule = "*/30 9-17 * * 1-5";
+        icon = "stretch.png";
+        snooze_duration = 600;
+      };
+    };
+  };
+}
+```
+
+### Traditional Installation
+
+#### Prerequisites
+
+- Python 3.11+
 - PyQt6
 - KDE Plasma 6 (or any Linux DE with X11/Wayland)
 
-### Install from source
+#### Using uv (Recommended)
 
 ```bash
-# Clone or navigate to the project
-cd desktop-reminder-system
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create virtual environment (recommended)
+# Sync dependencies
+uv sync
+
+# Run the application
+uv run python run.py
+```
+
+#### Using pip
+
+```bash
+# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Or install as a package
+# Install as a package
 pip install -e .
+
+# Run the application
+reminder-system
 ```
 
 ## Configuration
@@ -77,6 +134,7 @@ snooze_duration = 300  # seconds
 schedule = "0 * * * *"
 icon = "water.png"
 snooze_duration = 300
+
 
 # Stretch break every 30 minutes during work hours
 [stretch_break]
@@ -183,14 +241,50 @@ desktop-reminder-system/
 │   ├── config.py       # Configuration parser
 │   ├── overlay.py      # Overlay window widget
 │   └── scheduler.py    # Cron-based scheduler
+├── tests/
+│   ├── fixtures/       # Test config and icons
+│   ├── manual_trigger.py   # Manual overlay test
+│   ├── run_with_fixtures.py # Run with test config
+│   ├── test_config.py  # Config unit tests
+│   └── test_scheduler.py   # Scheduler unit tests
 ├── example_config/
 │   └── config.toml     # Example configuration
+├── flake.nix           # Nix flake (uv2nix)
+├── pyproject.toml      # Python project config
 ├── run.py              # Entry point
-├── requirements.txt
-├── setup.py
-├── pyproject.toml
 ├── reminder-system.service  # Systemd service
 └── reminder-system.desktop  # Desktop autostart
+```
+
+## Testing
+
+### Manual Overlay Test
+
+Test the overlay without configuring `~/.config/reminder-system/`:
+
+```bash
+# Using uv
+uv run python -m tests.manual_trigger
+
+# With custom icon
+uv run python -m tests.manual_trigger --icon /path/to/icon.png
+
+# With custom name
+uv run python -m tests.manual_trigger --name "Water Break"
+```
+
+### Run with Test Fixtures
+
+Run the full app using the test fixtures directory:
+
+```bash
+uv run python -m tests.run_with_fixtures
+```
+
+### Unit Tests
+
+```bash
+uv run pytest tests/
 ```
 
 ## Troubleshooting

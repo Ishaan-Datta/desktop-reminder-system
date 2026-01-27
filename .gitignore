@@ -1,0 +1,28 @@
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+.uv/
+.python-version
+uv.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.direnv
+
+# Nix
+result
+result-*
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/

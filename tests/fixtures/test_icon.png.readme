@@ -1,0 +1,11 @@
+# This is a placeholder for the test icon.
+# To use real icons, replace this file with a PNG image.
+#
+# You can use any 128x128 or 256x256 PNG image.
+# Some suggestions:
+# - Download free icons from https://www.flaticon.com/
+# - Use emoji as PNG from https://emojipedia.org/
+# - Create simple icons with GIMP or Inkscape
+#
+# For testing, the overlay will show a text fallback if
+# the icon file is not found or is not a valid image.
