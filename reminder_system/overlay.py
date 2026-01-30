@@ -126,15 +126,15 @@ class ReminderOverlay(QWidget):
         container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         container_layout.setSpacing(30)
         
+        # Single opacity effect for entire container (icon + buttons together)
+        self.container_opacity = QGraphicsOpacityEffect()
+        self.container_opacity.setOpacity(0.0)
+        self.container.setGraphicsEffect(self.container_opacity)
+        
         # Icon label
         self.icon_label = QLabel()
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.icon_label.setStyleSheet("background: transparent;")
-        
-        # Opacity effect for icon
-        self.icon_opacity = QGraphicsOpacityEffect()
-        self.icon_opacity.setOpacity(0.0)
-        self.icon_label.setGraphicsEffect(self.icon_opacity)
         
         container_layout.addWidget(self.icon_label)
         
@@ -158,23 +158,18 @@ class ReminderOverlay(QWidget):
         buttons_layout.addWidget(self.complete_btn)
         buttons_layout.addWidget(self.snooze_btn)
         
-        # Opacity effect for buttons
-        self.buttons_opacity = QGraphicsOpacityEffect()
-        self.buttons_opacity.setOpacity(0.0)
-        self.buttons_container.setGraphicsEffect(self.buttons_opacity)
-        
         container_layout.addWidget(self.buttons_container)
         
         main_layout.addWidget(self.container)
     
     def _setup_animations(self):
         """Set up the fade animations."""
-        # Icon fade-in animation
-        self.icon_fade_anim = QPropertyAnimation(self.icon_opacity, b"opacity")
-        self.icon_fade_anim.setDuration(self.ICON_FADE_DURATION)
-        self.icon_fade_anim.setStartValue(0.0)
-        self.icon_fade_anim.setEndValue(1.0)
-        self.icon_fade_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        # Container fade-in animation (icon + buttons together)
+        self.container_fade_anim = QPropertyAnimation(self.container_opacity, b"opacity")
+        self.container_fade_anim.setDuration(self.ICON_FADE_DURATION)
+        self.container_fade_anim.setStartValue(0.0)
+        self.container_fade_anim.setEndValue(1.0)
+        self.container_fade_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
         
         # Background fade timer (we'll animate this manually)
         self.bg_fade_timer = QTimer()
@@ -183,22 +178,15 @@ class ReminderOverlay(QWidget):
         self.bg_target_opacity = 0.0
         self.bg_fade_step = 0.0
         
-        # Buttons fade-in animation
-        self.buttons_fade_anim = QPropertyAnimation(self.buttons_opacity, b"opacity")
-        self.buttons_fade_anim.setDuration(self.BUTTON_FADE_DURATION)
-        self.buttons_fade_anim.setStartValue(0.0)
-        self.buttons_fade_anim.setEndValue(1.0)
-        self.buttons_fade_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        
         # Timer to start background fade after delay
         self.bg_delay_timer = QTimer()
         self.bg_delay_timer.setSingleShot(True)
         self.bg_delay_timer.timeout.connect(self._start_background_fade)
         
-        # Timer to show buttons after background fades
-        self.buttons_delay_timer = QTimer()
-        self.buttons_delay_timer.setSingleShot(True)
-        self.buttons_delay_timer.timeout.connect(self._show_buttons)
+        # Timer to make window interactive after fade completes
+        self.interactive_timer = QTimer()
+        self.interactive_timer.setSingleShot(True)
+        self.interactive_timer.timeout.connect(self._make_interactive)
     
     def paintEvent(self, event):
         """Paint the semi-transparent background."""
@@ -251,16 +239,15 @@ class ReminderOverlay(QWidget):
                 font-weight: bold;
             """)
         
-        # Reset opacity effects
-        self.icon_opacity.setOpacity(0.0)
-        self.buttons_opacity.setOpacity(0.0)
+        # Reset container opacity
+        self.container_opacity.setOpacity(0.0)
         
         # Show window
         self.show()
         self.raise_()
         
-        # Start animations
-        self.icon_fade_anim.start()
+        # Start animations - container and background fade together
+        self.container_fade_anim.start()
         self.bg_delay_timer.start(self.BACKGROUND_FADE_DELAY)
     
     def _start_background_fade(self):
@@ -275,17 +262,20 @@ class ReminderOverlay(QWidget):
         """Animate the background opacity."""
         self.background_opacity += self.bg_fade_step
         
-        if self.background_opacity >= self.bg_target_opacity:
+        if self.bg_fade_step > 0 and self.background_opacity >= self.bg_target_opacity:
             self.background_opacity = self.bg_target_opacity
             self.bg_fade_timer.stop()
             
-            # Show buttons after background is visible
-            self.buttons_delay_timer.start(200)
+            # Make window interactive after background is visible
+            self.interactive_timer.start(200)
+        elif self.bg_fade_step < 0 and self.background_opacity <= 0:
+            self.background_opacity = 0.0
+            self.bg_fade_timer.stop()
         
         self.update()
     
-    def _show_buttons(self):
-        """Show the buttons and make window interactive."""
+    def _make_interactive(self):
+        """Make the window interactive (accept clicks)."""
         self.is_interactive = True
         
         # Update window flags to accept focus and clicks
@@ -296,9 +286,6 @@ class ReminderOverlay(QWidget):
         )
         self.show()
         self.raise_()
-        
-        # Fade in buttons
-        self.buttons_fade_anim.start()
     
     def _on_complete(self):
         """Handle complete button click."""
@@ -312,21 +299,18 @@ class ReminderOverlay(QWidget):
     
     def _dismiss(self):
         """Dismiss the overlay with fade-out animation."""
-        # Quick fade out
+        # Calculate fade step to match DISMISS_FADE_DURATION
+        # step = current_opacity / (duration / interval)
+        steps = self.DISMISS_FADE_DURATION / 16
         self.bg_target_opacity = 0.0
-        self.bg_fade_step = -0.05
+        self.bg_fade_step = -self.background_opacity / steps if steps > 0 else -0.05
         self.bg_fade_timer.start()
         
-        # Fade out icon and buttons
-        fade_out_icon = QPropertyAnimation(self.icon_opacity, b"opacity")
-        fade_out_icon.setDuration(self.DISMISS_FADE_DURATION)
-        fade_out_icon.setEndValue(0.0)
-        fade_out_icon.start()
-        
-        fade_out_buttons = QPropertyAnimation(self.buttons_opacity, b"opacity")
-        fade_out_buttons.setDuration(self.DISMISS_FADE_DURATION)
-        fade_out_buttons.setEndValue(0.0)
-        fade_out_buttons.start()
+        # Fade out container (icon + buttons together)
+        self._fade_out_container = QPropertyAnimation(self.container_opacity, b"opacity")
+        self._fade_out_container.setDuration(self.DISMISS_FADE_DURATION)
+        self._fade_out_container.setEndValue(0.0)
+        self._fade_out_container.start()
         
         # Hide after animation
         QTimer.singleShot(self.DISMISS_FADE_DURATION + 100, self.hide)
