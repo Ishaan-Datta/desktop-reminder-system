@@ -95,12 +95,11 @@ class ReminderOverlay(QWidget):
     
     def _setup_window(self):
         """Configure window properties for overlay behavior."""
-        # Frameless, transparent window
+        # Frameless, transparent window - set flags once and never change them
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool |  # Doesn't show in taskbar
-            Qt.WindowType.WindowDoesNotAcceptFocus  # Don't steal focus initially
+            Qt.WindowType.Tool  # Doesn't show in taskbar
         )
         
         # Enable transparency
@@ -211,14 +210,6 @@ class ReminderOverlay(QWidget):
         self.background_opacity = 0.0
         self.is_interactive = False
         
-        # Reset window flags to non-interactive
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool |
-            Qt.WindowType.WindowDoesNotAcceptFocus
-        )
-        
         # Load and set the icon
         if icon_path.exists():
             pixmap = QPixmap(str(icon_path))
@@ -277,23 +268,18 @@ class ReminderOverlay(QWidget):
     def _make_interactive(self):
         """Make the window interactive (accept clicks)."""
         self.is_interactive = True
-        
-        # Update window flags to accept focus and clicks
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
-        )
-        self.show()
-        self.raise_()
     
     def _on_complete(self):
         """Handle complete button click."""
+        if not self.is_interactive:
+            return
         self._dismiss()
         self.completed.emit(self.reminder_name)
     
     def _on_snooze(self):
         """Handle snooze button click."""
+        if not self.is_interactive:
+            return
         self._dismiss()
         self.snoozed.emit(self.reminder_name, self.snooze_duration)
     
