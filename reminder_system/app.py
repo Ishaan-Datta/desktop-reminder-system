@@ -78,8 +78,8 @@ class ReminderApp(QObject):
             for name, config in reminders.items():
                 print(f"  - {name}: {config.schedule}")
             
-            # Create overlay
-            self.overlay = ReminderOverlay()
+            # Create overlay with general config settings
+            self.overlay = ReminderOverlay(general_config=self.config_manager.general)
             self.overlay.completed.connect(self._on_reminder_completed)
             self.overlay.snoozed.connect(self._on_reminder_snoozed)
             
@@ -235,7 +235,8 @@ class ReminderApp(QObject):
         self.overlay.show_reminder(
             name=config.name,
             icon_path=config.icon_path,
-            snooze_duration=config.snooze_duration
+            snooze_duration=config.snooze_duration,
+            text=config.text
         )
     
     def _on_reminder_completed(self, name: str):

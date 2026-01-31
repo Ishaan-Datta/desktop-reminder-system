@@ -1,20 +1,32 @@
 # Reminder System Configuration
 # Place icon files (PNG) in this same directory (~/.config/reminder-system/)
 
+# General settings (optional - these are the defaults)
+[general]
+text_font = "Sans Serif" # Font family for reminder text
+text_size = 24           # Font size in pixels for reminder text
+icon_scale = 1.0         # Scale factor for icons (1.0 = 200px base size)
+max_opacity = 0.85       # Maximum opacity of dark overlay (0.0-1.0)
+fade_in_duration = 2000  # Fade-in animation duration in milliseconds
+fade_out_duration = 500  # Fade-out animation duration in milliseconds
+
 # Example: Water break reminder every hour
 [water_break]
 schedule = "0 * * * *"
 icon = "water.png"
 snooze_duration = 300
+text = "Time to drink some water and stay hydrated!"
 
 # Example: Stretch break every 30 minutes during work hours (9am-5pm, Mon-Fri)
 [stretch_break]
 schedule = "*/30 9-17 * * 1-5"
 icon = "stretch.png"
 snooze_duration = 600
+text = "Stand up and stretch for a minute. Your body will thank you!"
 
 # Example: Eye rest every 20 minutes (20-20-20 rule)
 [eye_rest]
 schedule = "*/20 * * * *"
 icon = "eye.png"
 snooze_duration = 120
+text = "Look at something 20 feet away for 20 seconds to rest your eyes"

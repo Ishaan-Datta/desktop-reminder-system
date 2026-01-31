@@ -7,17 +7,17 @@ This script allows you to test the overlay window without needing to:
 2. Wait for cron schedules to trigger
 
 Usage:
-    # From project root:
+    # From project root (uses tests/fixtures/config.toml by default):
     python -m tests.manual_trigger
     
     # Or with uv:
     uv run python -m tests.manual_trigger
     
-    # With custom icon:
-    python -m tests.manual_trigger --icon /path/to/icon.png
+    # Use example_config instead:
+    python -m tests.manual_trigger --example
     
-    # With specific test reminder name:
-    python -m tests.manual_trigger --name "Water Break"
+    # Trigger a specific reminder by name:
+    python -m tests.manual_trigger --name water_break
 """
 
 import sys
@@ -32,30 +32,12 @@ from PyQt6.QtCore import QTimer
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from reminder_system.overlay import ReminderOverlay
-from reminder_system.config import ReminderConfig
+from reminder_system.config import ConfigManager
 
 
 # Directory containing test fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
-
-
-def create_test_reminder(
-    name: str = "Test Reminder",
-    icon_path: Path | None = None,
-    snooze_duration: int = 30
-) -> ReminderConfig:
-    """Create a ReminderConfig for testing."""
-    if icon_path is None:
-        # Use test icon if available, otherwise use a placeholder path
-        icon_path = FIXTURES_DIR / "test_icon.png"
-    
-    return ReminderConfig(
-        name=name,
-        schedule="* * * * *",  # Every minute (not used in manual trigger)
-        icon=icon_path.name,
-        snooze_duration=snooze_duration,
-        icon_path=icon_path
-    )
+EXAMPLE_CONFIG_DIR = Path(__file__).parent.parent / "example_config"
 
 
 def on_completed(name: str):
@@ -78,25 +60,13 @@ def main():
     )
     parser.add_argument(
         "--name", "-n",
-        default="Test Reminder",
-        help="Name to display for the reminder"
-    )
-    parser.add_argument(
-        "--icon", "-i",
-        type=Path,
         default=None,
-        help="Path to a PNG icon file"
+        help="Name of the reminder to trigger (uses first reminder if not specified)"
     )
     parser.add_argument(
-        "--snooze", "-s",
-        type=int,
-        default=30,
-        help="Snooze duration in seconds"
-    )
-    parser.add_argument(
-        "--use-fixture",
+        "--example", "-e",
         action="store_true",
-        help="Use the test fixture config instead of custom values"
+        help="Use example_config/config.toml instead of tests/fixtures/config.toml"
     )
     
     args = parser.parse_args()
@@ -111,21 +81,36 @@ def main():
     timer.timeout.connect(lambda: None)
     timer.start(500)
     
-    # Determine icon path
-    icon_path = args.icon
-    if icon_path is None:
-        icon_path = FIXTURES_DIR / "test_icon.png"
+    # Load config from fixture or example_config
+    config_dir = EXAMPLE_CONFIG_DIR if args.example else FIXTURES_DIR
+    print(f"Loading config from: {config_dir / 'config.toml'}")
     
-    if not icon_path.exists():
-        print(f"Note: Icon file not found at {icon_path}")
+    manager = ConfigManager(config_dir)
+    try:
+        reminders = manager.load_config()
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    
+    general_config = manager.general
+    
+    if not reminders:
+        print("No reminders found in config!")
+        sys.exit(1)
+    
+    # Select reminder by name or use first one
+    if args.name:
+        if args.name not in reminders:
+            print(f"Error: Reminder '{args.name}' not found in config.")
+            print(f"Available reminders: {', '.join(reminders.keys())}")
+            sys.exit(1)
+        config = reminders[args.name]
+    else:
+        config = list(reminders.values())[0]
+    
+    if not config.icon_path.exists():
+        print(f"Note: Icon file not found at {config.icon_path}")
         print("The overlay will display a text fallback instead.")
-    
-    # Create reminder config
-    config = create_test_reminder(
-        name=args.name,
-        icon_path=icon_path,
-        snooze_duration=args.snooze
-    )
     
     print("=" * 50)
     print("MANUAL REMINDER TRIGGER TEST")
@@ -133,14 +118,24 @@ def main():
     print(f"Reminder: {config.name}")
     print(f"Icon: {config.icon_path}")
     print(f"Snooze duration: {config.snooze_duration}s")
+    if config.text:
+        print(f"Text: {config.text}")
+    print("-" * 50)
+    print("General Settings:")
+    print(f"  Font: {general_config.text_font}")
+    print(f"  Text size: {general_config.text_size}px")
+    print(f"  Icon scale: {general_config.icon_scale}x")
+    print(f"  Max opacity: {general_config.max_opacity}")
+    print(f"  Fade-in: {general_config.fade_in_duration}ms")
+    print(f"  Fade-out: {general_config.fade_out_duration}ms")
     print("-" * 50)
     print("The overlay will appear shortly.")
     print("Click ✓ to complete or ⏰ to snooze.")
     print("Press Ctrl+C to cancel.")
     print("=" * 50)
     
-    # Create and show overlay
-    overlay = ReminderOverlay()
+    # Create and show overlay with general config
+    overlay = ReminderOverlay(general_config=general_config)
     overlay.completed.connect(on_completed)
     overlay.snoozed.connect(on_snoozed)
     
@@ -148,7 +143,8 @@ def main():
     QTimer.singleShot(500, lambda: overlay.show_reminder(
         name=config.name,
         icon_path=config.icon_path,
-        snooze_duration=config.snooze_duration
+        snooze_duration=config.snooze_duration,
+        text=config.text
     ))
     
     sys.exit(app.exec())

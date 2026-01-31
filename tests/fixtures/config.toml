@@ -1,12 +1,17 @@
 # Test Configuration
 # This config is used for testing without modifying ~/.config/reminder-system/
 
+# General settings (optional - these are the defaults)
+[general]
+text_font = "Sans Serif" # Font family for reminder text
+text_size = 24           # Font size in pixels for reminder text
+icon_scale = 1.0         # Scale factor for icons (1.0 = 200px base size)
+max_opacity = 0.85       # Maximum opacity of dark overlay (0.0-1.0)
+fade_in_duration = 2000  # Fade-in animation duration in milliseconds
+fade_out_duration = 500  # Fade-out animation duration in milliseconds
+
 [test_reminder]
+text = "Something something fr fr"
 schedule = "* * * * *"
 icon = "test_icon.png"
 snooze_duration = 10
-
-[water_break]
-schedule = "0 * * * *"
-icon = "water.png"
-snooze_duration = 60
