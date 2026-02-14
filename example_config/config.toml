@@ -16,27 +16,28 @@ resume_interval = 3      # Seconds to wait before showing the first queued remin
 
 # Example: Water break reminder every hour
 [water_break]
-schedule = "0 * * * *"
+schedule = ["0 * * * *"]
 icon = "water.png"
 snooze_duration = 300
 text = "Time to drink some water and stay hydrated!"
 
 # Example: Stretch break every 30 minutes during work hours (9am-5pm, Mon-Fri)
 [stretch_break]
-schedule = "*/30 9-17 * * 1-5"
+schedule = ["*/30 9-17 * * 1-5"]
 icon = "stretch.png"
 snooze_duration = 600
 text = "Stand up and stretch for a minute. Your body will thank you!"
 
 # Example: Eye rest every 20 minutes (20-20-20 rule)
 [eye_rest]
-schedule = "*/20 * * * *"
+schedule = ["*/20 * * * *"]
 icon = "eye.png"
 snooze_duration = 120
 text = "Look at something 20 feet away for 20 seconds to rest your eyes"
 
+# Example: Multiple active schedules for the same reminder
 [new_timer_example]
-schedule = "5 0-12 * * 1-5"
+schedule = ["5 0-12 * * 1-5", "5 14-17 * * 1-5"]
 icon = "thing.png"
 snooze_duration = 120
 text = "Something something here"

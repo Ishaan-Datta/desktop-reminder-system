@@ -29,10 +29,32 @@ class TestReminderConfig:
         config = ReminderConfig.from_dict("test", settings, Path("/tmp"))
         
         assert config.name == "test"
-        assert config.schedule == "0 * * * *"
+        assert config.schedule == ["0 * * * *"]
         assert config.icon == "test.png"
         assert config.snooze_duration == 120
         assert config.icon_path == Path("/tmp/test.png")
+    
+    def test_from_dict_list_schedule(self):
+        """Test creating config with a list of schedules."""
+        settings = {
+            "schedule": ["0 * * * *", "30 9-17 * * 1-5"],
+            "icon": "test.png",
+            "snooze_duration": 120
+        }
+        config = ReminderConfig.from_dict("test", settings, Path("/tmp"))
+        
+        assert config.schedule == ["0 * * * *", "30 9-17 * * 1-5"]
+    
+    def test_from_dict_string_schedule_normalized_to_list(self):
+        """Test that a single string schedule is normalized to a list."""
+        settings = {
+            "schedule": "*/5 * * * *",
+            "icon": "test.png"
+        }
+        config = ReminderConfig.from_dict("test", settings, Path("/tmp"))
+        
+        assert isinstance(config.schedule, list)
+        assert config.schedule == ["*/5 * * * *"]
     
     def test_from_dict_missing_schedule(self):
         """Test that missing schedule raises ValueError."""
@@ -154,7 +176,7 @@ class TestGeneralConfig:
         """Test parsing multiple reminders."""
         config_data = {
             "reminder1": {
-                "schedule": "0 * * * *",
+                "schedule": ["0 * * * *"],
                 "icon": "icon1.png",
                 "snooze_duration": 60
             },
@@ -169,6 +191,8 @@ class TestGeneralConfig:
         assert len(reminders) == 2
         assert "reminder1" in reminders
         assert "reminder2" in reminders
+        assert reminders["reminder1"].schedule == ["0 * * * *"]
+        assert reminders["reminder2"].schedule == ["30 9 * * *"]
         assert reminders["reminder1"].snooze_duration == 60
         assert reminders["reminder2"].snooze_duration == 300  # default
     
@@ -299,20 +323,21 @@ class TestConfigManager:
         assert manager.general.resume_interval == 1
     
     def test_load_config_reminder_with_text(self):
-        """Test that reminder text is loaded from fixtures."""
+        """Test that reminder text and list schedule are loaded from fixtures."""
         manager = ConfigManager(FIXTURES_DIR)
         reminders = manager.load_config()
         
-        # The fixture has a test_reminder with text
+        # The fixture has a test_reminder with text and list schedule
         assert "test_reminder" in reminders
         assert reminders["test_reminder"].text == "Something something fr fr"
+        assert reminders["test_reminder"].schedule == ["* * * * *"]
     
     def test_load_from_data(self):
         """Test loading reminders from pre-parsed data."""
         manager = ConfigManager(Path("/tmp"))
         config_data = {
             "my_reminder": {
-                "schedule": "*/5 * * * *",
+                "schedule": ["*/5 * * * *"],
                 "icon": "icon.png",
                 "snooze_duration": 180,
                 "text": "Custom reminder text"
@@ -323,6 +348,7 @@ class TestConfigManager:
         
         assert len(reminders) == 1
         assert "my_reminder" in reminders
+        assert reminders["my_reminder"].schedule == ["*/5 * * * *"]
         assert reminders["my_reminder"].snooze_duration == 180
         assert reminders["my_reminder"].text == "Custom reminder text"
     

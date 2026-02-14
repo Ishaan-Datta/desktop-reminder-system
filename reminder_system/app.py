@@ -7,7 +7,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QAction
-from PyQt6.QtCore import QObject, pyqtSignal, QThread, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, QTimer, QFileSystemWatcher
 
 from .config import ConfigManager, ReminderConfig
 from .scheduler import ReminderScheduler
@@ -69,6 +69,10 @@ class ReminderApp(QObject):
         
         # Queue polling timer (initialized in initialize())
         self._queue_poll_timer: Optional[QTimer] = None
+        
+        # Config file watcher for hot reload
+        self._config_watcher: Optional[QFileSystemWatcher] = None
+        self._reload_timer: Optional[QTimer] = None
     
     def initialize(self, skip_scheduler: bool = False) -> bool:
         """
@@ -90,7 +94,8 @@ class ReminderApp(QObject):
             
             print(f"Loaded {len(reminders)} reminders:")
             for name, config in reminders.items():
-                print(f"  - {name}: {config.schedule}")
+                schedules = ', '.join(config.schedule)
+                print(f"  - {name}: [{schedules}]")
             
             # Create overlay with general config settings
             self.overlay = ReminderOverlay(general_config=self.config_manager.general)
@@ -106,6 +111,9 @@ class ReminderApp(QObject):
             self._queue_poll_timer.setInterval(1000)  # Check every second
             self._queue_poll_timer.timeout.connect(self._check_queue_and_locks)
             self._queue_poll_timer.start()
+            
+            # Set up config file watcher for hot reload
+            self._setup_config_watcher()
             
             # Setup system tray (optional)
             if self._enable_tray:
@@ -397,12 +405,84 @@ class ReminderApp(QObject):
         self._active_from_queue = True
         self._show_reminder(config)
     
+    # ── Config hot reload ────────────────────────────────────────
+    
+    def _setup_config_watcher(self):
+        """Set up a file watcher on config.toml for hot reloading."""
+        self._config_watcher = QFileSystemWatcher()
+        config_path = str(self.config_manager.config_file)
+        self._config_watcher.addPath(config_path)
+        self._config_watcher.fileChanged.connect(self._on_config_file_changed)
+        
+        # Debounce timer to handle editors that delete+recreate files
+        self._reload_timer = QTimer()
+        self._reload_timer.setSingleShot(True)
+        self._reload_timer.setInterval(500)  # 500ms debounce
+        self._reload_timer.timeout.connect(self._reload_config)
+        
+        print(f"Watching config file for changes: {config_path}")
+    
+    def _on_config_file_changed(self, path: str):
+        """Handle config file change notification (debounced)."""
+        print(f"Config file change detected: {path}")
+        # Restart debounce timer (handles rapid successive writes)
+        self._reload_timer.start()
+    
+    def _reload_config(self):
+        """Reload configuration and update scheduler for non-snoozed reminders."""
+        config_path = str(self.config_manager.config_file)
+        
+        try:
+            new_reminders = self.config_manager.load_config()
+        except Exception as e:
+            print(f"Error reloading config: {e}")
+            # Re-add path in case it was removed (editor atomic save)
+            self._config_watcher.addPath(config_path)
+            return
+        
+        # Re-add the file to the watcher (some editors delete+recreate)
+        if config_path not in self._config_watcher.files():
+            self._config_watcher.addPath(config_path)
+        
+        # Determine which reminders are currently snoozed
+        snoozed_names = self.scheduler.get_snoozed_names()
+        
+        old_names = set(self.scheduler.reminders.keys())
+        new_names = set(new_reminders.keys())
+        
+        # Remove reminders that are no longer in config
+        for removed_name in old_names - new_names:
+            print(f"  Hot reload: removing '{removed_name}'")
+            self.scheduler.remove_reminder(removed_name)
+            self._queue.remove(removed_name)
+        
+        # Add or update reminders (skip snoozed ones)
+        for name, config in new_reminders.items():
+            if name in snoozed_names:
+                print(f"  Hot reload: skipping snoozed '{name}'")
+                continue
+            
+            # Remove old entry (if any) and re-add with new schedule
+            self.scheduler.remove_reminder(name)
+            self.scheduler.add_reminder(
+                name=name,
+                cron_expression=config.schedule,
+                callback=self._trigger_reminder_threadsafe
+            )
+        
+        print(f"Config reloaded: {len(new_reminders)} reminders "
+              f"({len(snoozed_names)} snoozed, kept unchanged)")
+    
+    # ── Tray and status ──────────────────────────────────────────
+    
     def _show_status(self):
         """Show the status of all reminders."""
         status = self.scheduler.get_status()
         print("\n=== Reminder Status ===")
         for name, info in status.items():
             print(f"\n{name}:")
+            schedules = ', '.join(info['schedules'])
+            print(f"  Schedules: [{schedules}]")
             print(f"  Next run: {info['effective_next']}")
             if info['snoozed_until']:
                 print(f"  Snoozed until: {info['snoozed_until']}")
@@ -428,6 +508,10 @@ class ReminderApp(QObject):
     def _quit(self):
         """Quit the application."""
         print("Shutting down...")
+        if self._reload_timer:
+            self._reload_timer.stop()
+        if self._config_watcher:
+            self._config_watcher.fileChanged.disconnect(self._on_config_file_changed)
         if self._queue_poll_timer:
             self._queue_poll_timer.stop()
         self.scheduler.stop()

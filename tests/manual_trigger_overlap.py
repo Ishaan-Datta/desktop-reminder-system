@@ -55,7 +55,7 @@ def build_fake_reminders(count: int, config_dir: Path) -> dict[str, ReminderConf
         emoji = colours[i % len(colours)]
         reminders[name] = ReminderConfig(
             name=name,
-            schedule="* * * * *",          # not used – we fire manually
+            schedule=["* * * * *"],          # not used – we fire manually
             icon=f"test_icon.png",
             snooze_duration=10,
             icon_path=config_dir / "test_icon.png",

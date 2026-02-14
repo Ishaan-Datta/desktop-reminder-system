@@ -15,9 +15,9 @@ class TestScheduledReminder:
         """Test calculating next run time."""
         reminder = ScheduledReminder(
             name="test",
-            cron_expression="* * * * *",  # Every minute
+            cron_expressions=["* * * * *"],  # Every minute
             callback=Mock(),
-            next_run=datetime.now()
+            next_runs=[datetime.now()]
         )
         
         next_run = reminder.calculate_next_run()
@@ -26,13 +26,29 @@ class TestScheduledReminder:
         assert next_run > datetime.now()
         assert next_run < datetime.now() + timedelta(minutes=2)
     
+    def test_calculate_next_run_multiple_schedules(self):
+        """Test that next_run returns the earliest across multiple schedules."""
+        reminder = ScheduledReminder(
+            name="test",
+            cron_expressions=["0 * * * *", "30 * * * *"],  # On the hour and half-hour
+            callback=Mock(),
+            next_runs=[datetime.now(), datetime.now()]
+        )
+        
+        next_run = reminder.calculate_next_run()
+        
+        # Should have two next_runs
+        assert len(reminder.next_runs) == 2
+        # next_run property should be the minimum
+        assert next_run == min(reminder.next_runs)
+    
     def test_snooze(self):
         """Test snoozing a reminder."""
         reminder = ScheduledReminder(
             name="test",
-            cron_expression="0 * * * *",
+            cron_expressions=["0 * * * *"],
             callback=Mock(),
-            next_run=datetime.now()
+            next_runs=[datetime.now()]
         )
         
         snoozed_until = reminder.snooze(300)  # 5 minutes
@@ -45,9 +61,9 @@ class TestScheduledReminder:
         """Test clearing snooze."""
         reminder = ScheduledReminder(
             name="test",
-            cron_expression="* * * * *",
+            cron_expressions=["* * * * *"],
             callback=Mock(),
-            next_run=datetime.now()
+            next_runs=[datetime.now()]
         )
         
         reminder.snooze(60)
@@ -61,9 +77,9 @@ class TestScheduledReminder:
         next_run = datetime.now() + timedelta(hours=1)
         reminder = ScheduledReminder(
             name="test",
-            cron_expression="0 * * * *",
+            cron_expressions=["0 * * * *"],
             callback=Mock(),
-            next_run=next_run
+            next_runs=[next_run]
         )
         
         assert reminder.get_effective_next_run() == next_run
@@ -73,9 +89,9 @@ class TestScheduledReminder:
         next_run = datetime.now() + timedelta(hours=1)
         reminder = ScheduledReminder(
             name="test",
-            cron_expression="0 * * * *",
+            cron_expressions=["0 * * * *"],
             callback=Mock(),
-            next_run=next_run
+            next_runs=[next_run]
         )
         
         reminder.snooze(60)
@@ -98,7 +114,18 @@ class TestReminderScheduler:
         
         assert "test" in scheduler.reminders
         assert scheduler.reminders["test"].name == "test"
-        assert scheduler.reminders["test"].cron_expression == "0 * * * *"
+        assert scheduler.reminders["test"].cron_expressions == ["0 * * * *"]
+    
+    def test_add_reminder_list_schedule(self):
+        """Test adding a reminder with multiple schedules."""
+        scheduler = ReminderScheduler()
+        callback = Mock()
+        
+        scheduler.add_reminder("test", ["0 * * * *", "30 * * * *"], callback)
+        
+        assert "test" in scheduler.reminders
+        assert scheduler.reminders["test"].cron_expressions == ["0 * * * *", "30 * * * *"]
+        assert len(scheduler.reminders["test"].next_runs) == 2
     
     def test_add_reminder_invalid_cron(self):
         """Test adding reminder with invalid cron expression."""
@@ -141,7 +168,7 @@ class TestReminderScheduler:
         """Test getting scheduler status."""
         scheduler = ReminderScheduler()
         scheduler.add_reminder("test1", "0 * * * *", Mock())
-        scheduler.add_reminder("test2", "30 * * * *", Mock())
+        scheduler.add_reminder("test2", ["30 * * * *", "0 9 * * *"], Mock())
         
         status = scheduler.get_status()
         
@@ -149,6 +176,26 @@ class TestReminderScheduler:
         assert "test2" in status
         assert "next_run" in status["test1"]
         assert "effective_next" in status["test1"]
+        assert "schedules" in status["test1"]
+        assert status["test1"]["schedules"] == ["0 * * * *"]
+        assert status["test2"]["schedules"] == ["30 * * * *", "0 9 * * *"]
+    
+    def test_get_snoozed_names(self):
+        """Test getting names of snoozed reminders."""
+        scheduler = ReminderScheduler()
+        scheduler.add_reminder("test1", "0 * * * *", Mock())
+        scheduler.add_reminder("test2", "30 * * * *", Mock())
+        scheduler.add_reminder("test3", "15 * * * *", Mock())
+        
+        # No snoozes initially
+        assert scheduler.get_snoozed_names() == set()
+        
+        # Snooze test1 and test3
+        scheduler.snooze_reminder("test1", 120)
+        scheduler.snooze_reminder("test3", 60)
+        
+        snoozed = scheduler.get_snoozed_names()
+        assert snoozed == {"test1", "test3"}
     
     def test_start_stop(self):
         """Test starting and stopping the scheduler."""

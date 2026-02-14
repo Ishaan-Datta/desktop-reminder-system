@@ -16,6 +16,6 @@ resume_interval = 1      # Seconds to wait before showing the first queued remin
 
 [test_reminder]
 text = "Something something fr fr"
-schedule = "* * * * *"
+schedule = ["* * * * *"]
 icon = "test_icon.png"
 snooze_duration = 10

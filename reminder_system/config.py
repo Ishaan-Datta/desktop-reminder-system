@@ -3,7 +3,7 @@
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -41,7 +41,7 @@ class GeneralConfig:
 class ReminderConfig:
     """Configuration for a single reminder."""
     name: str
-    schedule: str  # Cron string
+    schedule: List[str]  # List of cron strings (supports multiple active schedules)
     icon: str  # Filename of the icon
     snooze_duration: int  # Seconds
     icon_path: Path  # Full path to the icon
@@ -50,10 +50,17 @@ class ReminderConfig:
     def __post_init__(self):
         if isinstance(self.icon_path, str):
             self.icon_path = Path(self.icon_path)
+        # Normalize schedule to always be a list
+        if isinstance(self.schedule, str):
+            self.schedule = [self.schedule]
     
     @classmethod
     def from_dict(cls, name: str, settings: dict, config_dir: Path) -> "ReminderConfig":
-        """Create a ReminderConfig from a dictionary."""
+        """Create a ReminderConfig from a dictionary.
+        
+        The 'schedule' field may be a single cron string or a list of cron strings.
+        Both formats are normalized to a list internally.
+        """
         if "schedule" not in settings:
             raise ValueError(f"Reminder '{name}' is missing 'schedule' field")
         if "icon" not in settings:
@@ -62,9 +69,12 @@ class ReminderConfig:
         icon_filename = settings["icon"]
         icon_path = config_dir / icon_filename
         
+        raw_schedule = settings["schedule"]
+        schedule = raw_schedule if isinstance(raw_schedule, list) else [raw_schedule]
+        
         return cls(
             name=name,
-            schedule=settings["schedule"],
+            schedule=schedule,
             icon=icon_filename,
             snooze_duration=settings.get("snooze_duration", 300),
             icon_path=icon_path,
@@ -162,22 +172,23 @@ fade_out_duration = 500   # Fade-out animation duration in milliseconds
 snooze_lock_file = "/tmp/reminder-snooze.lock"  # Queue reminders while this file exists
 cancel_lock_file = "/tmp/reminder-cancel.lock"  # Skip reminders while this file exists
 stagger_interval = 5      # Seconds to wait between showing queued reminders
-resume_interval = 3       # Seconds to wait before showing the first queued reminder
+resume_interval = 3       # Seconds to wait before showing first queued reminder
 
 [water_break]
-schedule = "0 * * * *"  # Every hour
+schedule = ["0 * * * *"]  # Every hour
 icon = "water.png"
 snooze_duration = 300  # 5 minutes
 text = "Time to drink some water!"
 
 [stretch_break]
-schedule = "30 9-17 * * 1-5"  # Every 30 minutes during work hours on weekdays
+# Multiple schedules: during work hours AND after lunch
+schedule = ["30 9-12 * * 1-5", "30 13-17 * * 1-5"]
 icon = "stretch.png"
 snooze_duration = 600  # 10 minutes
 text = "Stand up and stretch for a minute"
 
 [eye_rest]
-schedule = "*/20 * * * *"  # Every 20 minutes (20-20-20 rule)
+schedule = ["*/20 * * * *"]  # Every 20 minutes (20-20-20 rule)
 icon = "eye.png"
 snooze_duration = 120  # 2 minutes
 text = "Look at something 20 feet away for 20 seconds"

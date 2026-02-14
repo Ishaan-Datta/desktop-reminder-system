@@ -270,6 +270,7 @@ class ReminderOverlay(QWidget):
         self.snooze_duration = snooze_duration
         self.background_opacity = 0.0
         self.is_interactive = False
+        self._dismissing = False
         self.reminder_text = text
         
         # Calculate scaled icon size based on icon_scale
@@ -347,38 +348,63 @@ class ReminderOverlay(QWidget):
     
     def _on_complete(self):
         """Handle complete button click."""
-        if not self.is_interactive:
+        if not self.is_interactive or self._dismissing:
             return
         self._dismiss()
         self.completed.emit(self.reminder_name)
     
     def _on_snooze(self):
-        """Handle snooze button click."""
-        if not self.is_interactive:
+        """Handle snooze button click (allowed during fade-in transition)."""
+        if self._dismissing:
             return
         self._dismiss()
         self.snoozed.emit(self.reminder_name, self.snooze_duration)
     
     def _dismiss(self):
-        """Dismiss the overlay with fade-out animation."""
-        # Calculate fade step to match fade_out_duration
-        # step = current_opacity / (duration / interval)
+        """Dismiss the overlay with fade-out animation.
+        
+        Handles dismissal during fade-in transition by stopping in-progress
+        animations and fading out from current opacity levels.
+        """
+        self._dismissing = True
+        
+        # Stop any ongoing fade-in animations and timers
+        self.container_fade_anim.stop()
+        self.bg_delay_timer.stop()
+        self.bg_fade_timer.stop()
+        self.interactive_timer.stop()
+        
+        # Fade out background from current opacity
         steps = self.fade_out_duration / 16
         self.bg_target_opacity = 0.0
-        self.bg_fade_step = -self.background_opacity / steps if steps > 0 else -0.05
-        self.bg_fade_timer.start()
+        if self.background_opacity > 0 and steps > 0:
+            self.bg_fade_step = -self.background_opacity / steps
+            self.bg_fade_timer.start()
+        else:
+            self.background_opacity = 0.0
         
-        # Fade out container (icon + text + buttons together)
+        # Fade out container from current opacity
+        current_opacity = self.container_opacity.opacity()
         self._fade_out_container = QPropertyAnimation(self.container_opacity, b"opacity")
         self._fade_out_container.setDuration(self.fade_out_duration)
+        self._fade_out_container.setStartValue(current_opacity)
         self._fade_out_container.setEndValue(0.0)
         self._fade_out_container.start()
         
-        # Hide after animation
-        QTimer.singleShot(self.fade_out_duration + 100, self.hide)
+        # Hide after animation and reset state
+        QTimer.singleShot(self.fade_out_duration + 100, self._finish_dismiss)
+    
+    def _finish_dismiss(self):
+        """Called after dismiss animation completes to clean up state."""
+        self.hide()
+        self._dismissing = False
     
     def keyPressEvent(self, event):
-        """Handle key presses."""
+        """Handle key presses.
+        
+        Escape (snooze) works during transition; Enter (complete) requires
+        the overlay to be fully interactive.
+        """
         if event.key() == Qt.Key.Key_Escape:
             self._on_snooze()
         elif event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
