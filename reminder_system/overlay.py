@@ -45,13 +45,20 @@ class CircleButton(QPushButton):
         painter.setPen(QPen(QColor(self.current_color).darker(120), 2))
         painter.drawEllipse(5, 5, 50, 50)
         
-        # Draw icon text
+        # Draw icon text centered using tight bounding rect for accurate positioning
         painter.setPen(QPen(QColor("white")))
         font = painter.font()
         font.setPointSize(24)
         font.setBold(True)
         painter.setFont(font)
-        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.icon_text)
+        
+        # Use tightBoundingRect to get the actual visual bounds of the glyph
+        circle_center_x = 5 + 25  # circle x + radius
+        circle_center_y = 5 + 25  # circle y + radius
+        tight_rect = painter.fontMetrics().tightBoundingRect(self.icon_text)
+        x = circle_center_x - tight_rect.width() // 2 - tight_rect.x()
+        y = circle_center_y - tight_rect.height() // 2 - tight_rect.y()
+        painter.drawText(x, y, self.icon_text)
     
     def enterEvent(self, event):
         self.current_color = self.hover_color
@@ -149,7 +156,7 @@ class ReminderOverlay(QWidget):
         self.container.setStyleSheet("background: transparent;")
         container_layout = QVBoxLayout(self.container)
         container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        container_layout.setSpacing(20)
+        container_layout.setSpacing(0)  # We'll control spacing manually for symmetry
         
         # Single opacity effect for entire container (icon + text + buttons together)
         self.container_opacity = QGraphicsOpacityEffect()
@@ -163,18 +170,22 @@ class ReminderOverlay(QWidget):
         
         container_layout.addWidget(self.icon_label)
         
+        # Spacing between icon and text (same as between text and buttons)
+        container_layout.addSpacing(25)
+        
         # Text label (between icon and buttons)
         self.text_label = QLabel()
         self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.text_label.setWordWrap(True)
         self.text_label.setMaximumWidth(600)  # Limit width for word wrap
+        self.text_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         self._update_text_label_style()
         self.text_label.hide()  # Hidden by default, shown when text is provided
         
         container_layout.addWidget(self.text_label)
         
-        # Add spacing before buttons
-        container_layout.addSpacing(10)
+        # Spacing between text and buttons (same as between icon and text)
+        container_layout.addSpacing(25)
         
         # Buttons container
         self.buttons_container = QWidget()
@@ -184,12 +195,12 @@ class ReminderOverlay(QWidget):
         buttons_layout.setSpacing(40)
         
         # Complete button (green checkmark)
-        self.complete_btn = CircleButton("✓", "#4CAF50", "#66BB6A")
+        self.complete_btn = CircleButton("✔", "#4CAF50", "#66BB6A")
         self.complete_btn.setToolTip("Mark as complete")
         self.complete_btn.clicked.connect(self._on_complete)
         
-        # Snooze button (grey clock)
-        self.snooze_btn = CircleButton("⏰", "#757575", "#9E9E9E")
+        # Snooze button (grey - using nerd font clock icon)
+        self.snooze_btn = CircleButton("⏳", "#757575", "#9E9E9E")  # Nerd font clock icon
         self.snooze_btn.setToolTip("Snooze")
         self.snooze_btn.clicked.connect(self._on_snooze)
         
@@ -207,7 +218,6 @@ class ReminderOverlay(QWidget):
             color: white;
             font-family: "{self.text_font}";
             font-size: {self.text_size}px;
-            padding: 10px;
         """)
     
     def _setup_animations(self):
