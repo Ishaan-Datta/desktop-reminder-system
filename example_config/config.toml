@@ -12,6 +12,7 @@ fade_out_duration = 500  # Fade-out animation duration in milliseconds
 snooze_lock_file = "/tmp/reminder-snooze.lock"  # Queue reminders while this file exists
 cancel_lock_file = "/tmp/reminder-cancel.lock"  # Skip reminders while this file exists
 stagger_interval = 5     # Seconds to wait between showing queued reminders
+resume_interval = 3      # Seconds to wait before showing the first queued reminder
 
 # Example: Water break reminder every hour
 [water_break]

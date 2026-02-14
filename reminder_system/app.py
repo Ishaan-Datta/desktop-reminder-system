@@ -53,6 +53,7 @@ class ReminderApp(QObject):
         
         # Current active reminder
         self.active_reminder: Optional[ReminderConfig] = None
+        self._active_from_queue: bool = False  # Whether the current overlay is a queued reminder
         
         # Persistent queue for reminders (initialized in initialize())
         self._queue: Optional[PersistentReminderQueue] = None
@@ -62,6 +63,9 @@ class ReminderApp(QObject):
         
         # Stagger state: prevents showing next queued reminder too quickly
         self._stagger_pending: bool = False
+        
+        # Resume state: delay before showing the first queued reminder
+        self._resume_pending: bool = False
         
         # Queue polling timer (initialized in initialize())
         self._queue_poll_timer: Optional[QTimer] = None
@@ -288,28 +292,48 @@ class ReminderApp(QObject):
         """Handle reminder being marked as complete."""
         print(f"Reminder completed: {name}")
         self.scheduler.complete_reminder(name)
+        was_from_queue = self._active_from_queue
         self.active_reminder = None
-        self._start_stagger_delay()
+        self._active_from_queue = False
+        self._start_queue_delay(was_from_queue)
     
     def _on_reminder_snoozed(self, name: str, duration: int):
         """Handle reminder being snoozed."""
         print(f"Reminder snoozed: {name} for {duration}s")
         self.scheduler.snooze_reminder(name, duration)
+        was_from_queue = self._active_from_queue
         self.active_reminder = None
-        self._start_stagger_delay()
+        self._active_from_queue = False
+        self._start_queue_delay(was_from_queue)
     
-    def _start_stagger_delay(self):
-        """Start a stagger delay before showing the next queued reminder."""
+    def _start_queue_delay(self, previous_was_queued: bool):
+        """Start the appropriate delay before showing the next queued reminder.
+        
+        Uses resume_interval for the first queued item (previous reminder was
+        live-triggered), stagger_interval for subsequent queue items.
+        """
         if self._queue is None or self._queue.is_empty():
             return
-        stagger_ms = self.config_manager.general.stagger_interval * 1000
-        self._stagger_pending = True
-        print(f"Stagger delay: waiting {self.config_manager.general.stagger_interval}s before next reminder")
-        QTimer.singleShot(stagger_ms, self._end_stagger_delay)
+        if previous_was_queued:
+            delay_s = self.config_manager.general.stagger_interval
+            label = "Stagger"
+            self._stagger_pending = True
+            QTimer.singleShot(delay_s * 1000, self._end_stagger_delay)
+        else:
+            delay_s = self.config_manager.general.resume_interval
+            label = "Resume"
+            self._resume_pending = True
+            QTimer.singleShot(delay_s * 1000, self._end_resume_delay)
+        print(f"{label} delay: waiting {delay_s}s before next reminder")
     
     def _end_stagger_delay(self):
         """End the stagger delay, allowing queue processing to resume."""
         self._stagger_pending = False
+    
+    def _end_resume_delay(self):
+        """End the resume delay, allowing the first queued reminder to show."""
+        self._resume_pending = False
+        print("Resume delay ended, processing queue")
     
     def _check_queue_and_locks(self):
         """
@@ -331,11 +355,16 @@ class ReminderApp(QObject):
             return  # Don't process queue while snooze lock is active
         
         if self._snooze_lock_was_active and not snooze_active:
-            print("Snooze lock removed, will process queued reminders")
             self._snooze_lock_was_active = False
+            if not self._queue.is_empty():
+                resume_s = self.config_manager.general.resume_interval
+                print(f"Snooze lock removed, resuming queue in {resume_s}s")
+                self._resume_pending = True
+                QTimer.singleShot(resume_s * 1000, self._end_resume_delay)
+            return  # Wait for the resume timer to fire
         
-        # Don't process if overlay is active or stagger delay is pending
-        if self.active_reminder is not None or self._stagger_pending:
+        # Don't process if overlay is active or any delay is pending
+        if self.active_reminder is not None or self._stagger_pending or self._resume_pending:
             return
         
         # Process next item from queue
@@ -365,6 +394,7 @@ class ReminderApp(QObject):
         
         print(f"Showing queued reminder: {name}")
         config = self.config_manager.reminders[name]
+        self._active_from_queue = True
         self._show_reminder(config)
     
     def _show_status(self):

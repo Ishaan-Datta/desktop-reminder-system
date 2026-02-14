@@ -93,6 +93,7 @@ class TestGeneralConfig:
         assert config.snooze_lock_file == "/tmp/reminder-snooze.lock"
         assert config.cancel_lock_file == "/tmp/reminder-cancel.lock"
         assert config.stagger_interval == 5
+        assert config.resume_interval == 3
     
     def test_from_dict_full(self):
         """Test creating GeneralConfig from dictionary with all values."""
@@ -105,7 +106,8 @@ class TestGeneralConfig:
             "fade_out_duration": 800,
             "snooze_lock_file": "/run/user/1000/snooze.lock",
             "cancel_lock_file": "/run/user/1000/cancel.lock",
-            "stagger_interval": 10
+            "stagger_interval": 10,
+            "resume_interval": 7
         }
         config = GeneralConfig.from_dict(settings)
         
@@ -118,6 +120,7 @@ class TestGeneralConfig:
         assert config.snooze_lock_file == "/run/user/1000/snooze.lock"
         assert config.cancel_lock_file == "/run/user/1000/cancel.lock"
         assert config.stagger_interval == 10
+        assert config.resume_interval == 7
     
     def test_from_dict_partial(self):
         """Test creating GeneralConfig with only some values specified."""
@@ -136,6 +139,7 @@ class TestGeneralConfig:
         assert config.snooze_lock_file == "/tmp/reminder-snooze.lock"  # default
         assert config.cancel_lock_file == "/tmp/reminder-cancel.lock"  # default
         assert config.stagger_interval == 5  # default
+        assert config.resume_interval == 3  # default
     
     def test_from_dict_empty(self):
         """Test creating GeneralConfig from empty dictionary uses defaults."""
@@ -216,11 +220,7 @@ class TestGeneralConfig:
         assert general.max_opacity == 0.75
         assert general.fade_in_duration == 1500
         assert general.fade_out_duration == 400
-        
-        # New fields should use defaults when not specified
-        assert general.snooze_lock_file == "/tmp/reminder-snooze.lock"
-        assert general.cancel_lock_file == "/tmp/reminder-cancel.lock"
-        assert general.stagger_interval == 5
+        assert general.resume_interval == 3
         
         # Check reminder text
         assert reminders["reminder1"].text == "Drink water!"
@@ -296,6 +296,7 @@ class TestConfigManager:
         assert manager.general.snooze_lock_file == "/tmp/test-reminder-snooze.lock"
         assert manager.general.cancel_lock_file == "/tmp/test-reminder-cancel.lock"
         assert manager.general.stagger_interval == 2
+        assert manager.general.resume_interval == 1
     
     def test_load_config_reminder_with_text(self):
         """Test that reminder text is loaded from fixtures."""

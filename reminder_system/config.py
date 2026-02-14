@@ -18,6 +18,7 @@ class GeneralConfig:
     snooze_lock_file: str = "/tmp/reminder-snooze.lock"
     cancel_lock_file: str = "/tmp/reminder-cancel.lock"
     stagger_interval: int = 5  # seconds between displaying queued reminders
+    resume_interval: int = 3  # seconds to wait before showing first queued reminder
     
     @classmethod
     def from_dict(cls, settings: dict) -> "GeneralConfig":
@@ -32,6 +33,7 @@ class GeneralConfig:
             snooze_lock_file=settings.get("snooze_lock_file", "/tmp/reminder-snooze.lock"),
             cancel_lock_file=settings.get("cancel_lock_file", "/tmp/reminder-cancel.lock"),
             stagger_interval=settings.get("stagger_interval", 5),
+            resume_interval=settings.get("resume_interval", 3),
         )
 
 
@@ -160,6 +162,7 @@ fade_out_duration = 500   # Fade-out animation duration in milliseconds
 snooze_lock_file = "/tmp/reminder-snooze.lock"  # Queue reminders while this file exists
 cancel_lock_file = "/tmp/reminder-cancel.lock"  # Skip reminders while this file exists
 stagger_interval = 5      # Seconds to wait between showing queued reminders
+resume_interval = 3       # Seconds to wait before showing the first queued reminder
 
 [water_break]
 schedule = "0 * * * *"  # Every hour
