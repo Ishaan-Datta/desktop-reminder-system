@@ -112,8 +112,7 @@ class TestGeneralConfig:
         assert config.max_opacity == 0.85
         assert config.fade_in_duration == 2000
         assert config.fade_out_duration == 500
-        assert config.snooze_lock_file == "/tmp/reminder-snooze.lock"
-        assert config.cancel_lock_file == "/tmp/reminder-cancel.lock"
+        assert config.lock_dir == "/tmp"
         assert config.stagger_interval == 5
         assert config.resume_interval == 3
     
@@ -126,8 +125,7 @@ class TestGeneralConfig:
             "max_opacity": 0.9,
             "fade_in_duration": 3000,
             "fade_out_duration": 800,
-            "snooze_lock_file": "/run/user/1000/snooze.lock",
-            "cancel_lock_file": "/run/user/1000/cancel.lock",
+            "lock_dir": "/run/user/1000/locks",
             "stagger_interval": 10,
             "resume_interval": 7
         }
@@ -139,8 +137,7 @@ class TestGeneralConfig:
         assert config.max_opacity == 0.9
         assert config.fade_in_duration == 3000
         assert config.fade_out_duration == 800
-        assert config.snooze_lock_file == "/run/user/1000/snooze.lock"
-        assert config.cancel_lock_file == "/run/user/1000/cancel.lock"
+        assert config.lock_dir == "/run/user/1000/locks"
         assert config.stagger_interval == 10
         assert config.resume_interval == 7
     
@@ -158,8 +155,7 @@ class TestGeneralConfig:
         assert config.max_opacity == 0.85  # default
         assert config.fade_in_duration == 2000  # default
         assert config.fade_out_duration == 500  # default
-        assert config.snooze_lock_file == "/tmp/reminder-snooze.lock"  # default
-        assert config.cancel_lock_file == "/tmp/reminder-cancel.lock"  # default
+        assert config.lock_dir == "/tmp"  # default
         assert config.stagger_interval == 5  # default
         assert config.resume_interval == 3  # default
     
@@ -317,8 +313,7 @@ class TestConfigManager:
         assert manager.general.max_opacity == 0.85
         assert manager.general.fade_in_duration == 2000
         assert manager.general.fade_out_duration == 500
-        assert manager.general.snooze_lock_file == "/tmp/test-reminder-snooze.lock"
-        assert manager.general.cancel_lock_file == "/tmp/test-reminder-cancel.lock"
+        assert manager.general.lock_dir == "/tmp/test-reminder-locks"
         assert manager.general.stagger_interval == 2
         assert manager.general.resume_interval == 1
     

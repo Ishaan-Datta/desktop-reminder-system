@@ -15,8 +15,7 @@ class GeneralConfig:
     max_opacity: float = 0.85
     fade_in_duration: int = 2000  # milliseconds
     fade_out_duration: int = 500  # milliseconds
-    snooze_lock_file: str = "/tmp/reminder-snooze.lock"
-    cancel_lock_file: str = "/tmp/reminder-cancel.lock"
+    lock_dir: str = "/tmp"  # Directory scanned for *_snooze.lock / *_cancel.lock
     stagger_interval: int = 5  # seconds between displaying queued reminders
     resume_interval: int = 3  # seconds to wait before showing first queued reminder
     
@@ -30,8 +29,7 @@ class GeneralConfig:
             max_opacity=settings.get("max_opacity", 0.85),
             fade_in_duration=settings.get("fade_in_duration", 2000),
             fade_out_duration=settings.get("fade_out_duration", 500),
-            snooze_lock_file=settings.get("snooze_lock_file", "/tmp/reminder-snooze.lock"),
-            cancel_lock_file=settings.get("cancel_lock_file", "/tmp/reminder-cancel.lock"),
+            lock_dir=settings.get("lock_dir", "/tmp"),
             stagger_interval=settings.get("stagger_interval", 5),
             resume_interval=settings.get("resume_interval", 3),
         )
@@ -169,8 +167,7 @@ icon_scale = 1.0          # Scale factor for icons (1.0 = 200px)
 max_opacity = 0.85        # Maximum opacity of dark overlay (0.0-1.0)
 fade_in_duration = 2000   # Fade-in animation duration in milliseconds
 fade_out_duration = 500   # Fade-out animation duration in milliseconds
-snooze_lock_file = "/tmp/reminder-snooze.lock"  # Queue reminders while this file exists
-cancel_lock_file = "/tmp/reminder-cancel.lock"  # Skip reminders while this file exists
+lock_dir = "/tmp"          # Directory scanned for *_snooze.lock and *_cancel.lock files
 stagger_interval = 5      # Seconds to wait between showing queued reminders
 resume_interval = 3       # Seconds to wait before showing first queued reminder
 

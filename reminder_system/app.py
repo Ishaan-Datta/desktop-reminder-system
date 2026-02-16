@@ -13,6 +13,7 @@ from .config import ConfigManager, ReminderConfig
 from .scheduler import ReminderScheduler
 from .overlay import ReminderOverlay
 from .queue import PersistentReminderQueue
+from .tray_window import TrayWindow
 
 
 class ReminderTrigger(QObject):
@@ -58,8 +59,13 @@ class ReminderApp(QObject):
         # Persistent queue for reminders (initialized in initialize())
         self._queue: Optional[PersistentReminderQueue] = None
         
-        # Lock file state tracking
-        self._snooze_lock_was_active: bool = False
+        # Lock file state tracking (glob-scanned from lock_dir)
+        self._lock_was_active: bool = False
+        self._snooze_lock_names: list[str] = []  # prefixes from *_snooze.lock files
+        self._cancel_lock_names: list[str] = []  # prefixes from *_cancel.lock files
+        
+        # Tray panel window (initialized in _setup_tray)
+        self._tray_window: Optional[TrayWindow] = None
         
         # Stagger state: prevents showing next queued reminder too quickly
         self._stagger_pending: bool = False
@@ -192,7 +198,7 @@ class ReminderApp(QObject):
         self._show_reminder(config)
     
     def _setup_tray(self):
-        """Set up the system tray icon."""
+        """Set up the system tray icon and panel window."""
         # Create a simple icon
         pixmap = QPixmap(32, 32)
         pixmap.fill(QColor("transparent"))
@@ -214,7 +220,11 @@ class ReminderApp(QObject):
         self.tray_icon = QSystemTrayIcon(icon)
         self.tray_icon.setToolTip("Reminder System")
         
-        # Create tray menu
+        # Panel window (shown on left-click)
+        self._tray_window = TrayWindow(self)
+        self.tray_icon.activated.connect(self._on_tray_activated)
+        
+        # Right-click context menu
         menu = QMenu()
         
         status_action = QAction("Reminder System", menu)
@@ -223,19 +233,12 @@ class ReminderApp(QObject):
         
         menu.addSeparator()
         
-        # Show status action
-        show_status = QAction("Show Status", menu)
+        show_status = QAction("Print Status", menu)
         show_status.triggered.connect(self._show_status)
         menu.addAction(show_status)
         
-        # Test reminder action
-        test_action = QAction("Test Reminder", menu)
-        test_action.triggered.connect(self._test_reminder)
-        menu.addAction(test_action)
-        
         menu.addSeparator()
         
-        # Quit action
         quit_action = QAction("Quit", menu)
         quit_action.triggered.connect(self._quit)
         menu.addAction(quit_action)
@@ -243,18 +246,53 @@ class ReminderApp(QObject):
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
     
+    def _on_tray_activated(self, reason):
+        """Toggle tray panel on left-click."""
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self._tray_window.toggle_visibility(self.tray_icon.geometry())
+    
     def _trigger_reminder_threadsafe(self, name: str):
         """Thread-safe method to trigger a reminder."""
         # Emit signal to main thread
         self.trigger.triggered.emit(name)
     
-    def _is_snooze_locked(self) -> bool:
-        """Check if the snooze lock file is present."""
-        return Path(self.config_manager.general.snooze_lock_file).exists()
+    def _scan_lock_files(self) -> tuple[bool, bool]:
+        """Scan lock_dir for \*_cancel.lock and \*_snooze.lock files.
+        
+        Updates self._cancel_lock_names and self._snooze_lock_names with
+        the prefixes scraped from each filename (the part before the
+        ``_cancel.lock`` / ``_snooze.lock`` suffix).
+        
+        Returns:
+            (cancel_active, snooze_active) booleans.
+        """
+        lock_dir = Path(self.config_manager.general.lock_dir)
+        cancel_names: list[str] = []
+        snooze_names: list[str] = []
+        
+        if lock_dir.is_dir():
+            for f in lock_dir.glob("*_cancel.lock"):
+                if f.is_file():
+                    prefix = f.name[: -len("_cancel.lock")]
+                    cancel_names.append(prefix)
+            for f in lock_dir.glob("*_snooze.lock"):
+                if f.is_file():
+                    prefix = f.name[: -len("_snooze.lock")]
+                    snooze_names.append(prefix)
+        
+        self._cancel_lock_names = cancel_names
+        self._snooze_lock_names = snooze_names
+        return bool(cancel_names), bool(snooze_names)
     
     def _is_cancel_locked(self) -> bool:
-        """Check if the cancel lock file is present."""
-        return Path(self.config_manager.general.cancel_lock_file).exists()
+        """Convenience: True when any \*_cancel.lock file exists."""
+        cancel, _ = self._scan_lock_files()
+        return cancel
+    
+    def _is_snooze_locked(self) -> bool:
+        """Convenience: True when any \*_snooze.lock file exists."""
+        _, snooze = self._scan_lock_files()
+        return snooze
     
     def _on_reminder_triggered(self, name: str):
         """Handle a reminder being triggered (main thread)."""
@@ -264,17 +302,18 @@ class ReminderApp(QObject):
             print(f"Warning: Unknown reminder '{name}'")
             return
         
-        # Check cancel lock — skip entirely
-        if self._is_cancel_locked():
+        # Scan lock files once (cancel takes precedence over snooze)
+        cancel_active, snooze_active = self._scan_lock_files()
+        
+        if cancel_active:
             print(f"Cancel lock active, skipping reminder: {name}")
             self.scheduler.complete_reminder(name)
             return
         
-        # Check snooze lock — queue for later
-        if self._is_snooze_locked():
+        if snooze_active:
             print(f"Snooze lock active, queueing reminder: {name}")
             self._queue.push_back(name)
-            self._snooze_lock_was_active = True
+            self._lock_was_active = True
             return
         
         # If overlay is already showing or stagger delay is pending, queue
@@ -348,25 +387,28 @@ class ReminderApp(QObject):
         Periodic check for lock file state changes and queue processing.
         
         Called every second by _queue_poll_timer.  Handles:
-        - Detecting when snooze lock file is removed to resume queue processing
-        - Processing queued reminders when no overlay is active
-        - Respecting cancel lock during queue processing
+        - Scanning lock_dir for *_snooze.lock / *_cancel.lock files
+        - Holding the queue while any lock is active (cancel takes precedence)
+        - Detecting when all locks are removed to resume queue processing
+        - Respecting stagger / resume delays
         """
         if self._queue is None:
             return
         
-        snooze_active = self._is_snooze_locked()
+        cancel_active, snooze_active = self._scan_lock_files()
+        any_lock = cancel_active or snooze_active
         
-        # Track snooze lock transitions
-        if snooze_active:
-            self._snooze_lock_was_active = True
-            return  # Don't process queue while snooze lock is active
+        # While any lock is active, hold the queue
+        if any_lock:
+            self._lock_was_active = True
+            return
         
-        if self._snooze_lock_was_active and not snooze_active:
-            self._snooze_lock_was_active = False
+        # Locks just removed → start resume delay
+        if self._lock_was_active and not any_lock:
+            self._lock_was_active = False
             if not self._queue.is_empty():
                 resume_s = self.config_manager.general.resume_interval
-                print(f"Snooze lock removed, resuming queue in {resume_s}s")
+                print(f"Lock files removed, resuming queue in {resume_s}s")
                 self._resume_pending = True
                 QTimer.singleShot(resume_s * 1000, self._end_resume_delay)
             return  # Wait for the resume timer to fire
@@ -383,6 +425,11 @@ class ReminderApp(QObject):
         if self._queue is None or self._queue.is_empty():
             return
         
+        # Safety: re-check locks (could have appeared since last tick)
+        cancel_active, snooze_active = self._scan_lock_files()
+        if cancel_active or snooze_active:
+            return
+        
         name = self._queue.pop()
         if name is None:
             return
@@ -390,13 +437,6 @@ class ReminderApp(QObject):
         # Check if the reminder still exists in config
         if name not in self.config_manager.reminders:
             print(f"Queued reminder '{name}' no longer in config, skipping")
-            self._process_next_queued()  # Try next
-            return
-        
-        # Check cancel lock — skip queued item too
-        if self._is_cancel_locked():
-            print(f"Cancel lock active, skipping queued reminder: {name}")
-            self.scheduler.complete_reminder(name)
             self._process_next_queued()  # Try next
             return
         
@@ -490,20 +530,10 @@ class ReminderApp(QObject):
         if self._queue:
             queued = self._queue.get_all()
             print(f"\nQueued reminders: {queued if queued else '(none)'}")
-        print(f"Snooze lock: {'ACTIVE' if self._is_snooze_locked() else 'inactive'}")
-        print(f"Cancel lock: {'ACTIVE' if self._is_cancel_locked() else 'inactive'}")
+        print(f"Lock dir: {self.config_manager.general.lock_dir}")
+        print(f"Cancel locks: {self._cancel_lock_names if self._cancel_lock_names else 'none'}")
+        print(f"Snooze locks: {self._snooze_lock_names if self._snooze_lock_names else 'none'}")
         print("=" * 24 + "\n")
-    
-    def _test_reminder(self):
-        """Trigger a test reminder."""
-        if self.config_manager.reminders:
-            # Get first reminder for testing
-            name = list(self.config_manager.reminders.keys())[0]
-            config = self.config_manager.reminders[name]
-            print(f"Testing reminder: {name}")
-            self._show_reminder(config)
-        else:
-            print("No reminders configured")
     
     def _quit(self):
         """Quit the application."""
@@ -514,6 +544,8 @@ class ReminderApp(QObject):
             self._config_watcher.fileChanged.disconnect(self._on_config_file_changed)
         if self._queue_poll_timer:
             self._queue_poll_timer.stop()
+        if self._tray_window:
+            self._tray_window.close()
         self.scheduler.stop()
         QApplication.quit()
     

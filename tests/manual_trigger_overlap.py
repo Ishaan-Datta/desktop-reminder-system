@@ -17,13 +17,13 @@ Usage:
     uv run python -m tests.manual_trigger_overlap --stagger 3 --resume 2
 
     # Pre-create the snooze lock so reminders get queued, then remove it:
-    touch /tmp/test-reminder-snooze.lock
+    touch /tmp/reminder-system_snooze.lock
     uv run python -m tests.manual_trigger_overlap
     # (reminders queue up; remove the lock to see them drain)
-    rm /tmp/test-reminder-snooze.lock
+    rm /tmp/reminder-system_snooze.lock
 
     # Pre-create the cancel lock so all reminders are silently skipped:
-    touch /tmp/test-reminder-cancel.lock
+    touch /tmp/reminder-system_cancel.lock
     uv run python -m tests.manual_trigger_overlap
 """
 
@@ -85,12 +85,8 @@ def main():
         help="Override resume_interval (seconds before first queued reminder)",
     )
     parser.add_argument(
-        "--snooze-lock", type=str, default=None,
-        help="Override snooze lock file path",
-    )
-    parser.add_argument(
-        "--cancel-lock", type=str, default=None,
-        help="Override cancel lock file path",
+        "--lock-dir", type=str, default=None,
+        help="Override lock_dir (directory scanned for *_snooze.lock / *_cancel.lock)",
     )
     args = parser.parse_args()
 
@@ -123,10 +119,8 @@ def main():
         general.stagger_interval = args.stagger
     if args.resume is not None:
         general.resume_interval = args.resume
-    if args.snooze_lock is not None:
-        general.snooze_lock_file = args.snooze_lock
-    if args.cancel_lock is not None:
-        general.cancel_lock_file = args.cancel_lock
+    if args.lock_dir is not None:
+        general.lock_dir = args.lock_dir
 
     # ── Print summary ────────────────────────────────────────────
     print("=" * 60)
@@ -136,10 +130,12 @@ def main():
     print(f"  Trigger delay     : {args.delay}ms between each")
     print(f"  Stagger interval  : {general.stagger_interval}s")
     print(f"  Resume interval   : {general.resume_interval}s")
-    print(f"  Snooze lock file  : {general.snooze_lock_file}")
-    print(f"  Cancel lock file  : {general.cancel_lock_file}")
-    print(f"  Snooze lock exists: {Path(general.snooze_lock_file).exists()}")
-    print(f"  Cancel lock exists: {Path(general.cancel_lock_file).exists()}")
+    print(f"  Lock dir          : {general.lock_dir}")
+    lock_dir = Path(general.lock_dir)
+    snooze_locks = list(lock_dir.glob("*_snooze.lock")) if lock_dir.is_dir() else []
+    cancel_locks = list(lock_dir.glob("*_cancel.lock")) if lock_dir.is_dir() else []
+    print(f"  Snooze locks found: {len(snooze_locks)} {[f.name for f in snooze_locks]}")
+    print(f"  Cancel locks found: {len(cancel_locks)} {[f.name for f in cancel_locks]}")
     print("-" * 60)
     print("Reminders will be triggered shortly.")
     print("  ✓  = mark complete        ⏳ = snooze")
