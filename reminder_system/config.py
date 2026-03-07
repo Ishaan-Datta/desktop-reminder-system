@@ -18,6 +18,9 @@ class GeneralConfig:
     lock_dir: str = "/tmp"  # Directory scanned for *_snooze.lock / *_cancel.lock
     stagger_interval: int = 5  # seconds between displaying queued reminders
     resume_interval: int = 3  # seconds to wait before showing first queued reminder
+    work_session_enable: bool = True
+    work_session_start: str = "09:00"  # HH:MM 24-hour
+    work_session_end: str = "17:00"    # HH:MM 24-hour
     
     @classmethod
     def from_dict(cls, settings: dict) -> "GeneralConfig":
@@ -32,6 +35,9 @@ class GeneralConfig:
             lock_dir=settings.get("lock_dir", "/tmp"),
             stagger_interval=settings.get("stagger_interval", 5),
             resume_interval=settings.get("resume_interval", 3),
+            work_session_enable=settings.get("work_session_enable", False),
+            work_session_start=settings.get("work_session_start", "09:00"),
+            work_session_end=settings.get("work_session_end", "17:00"),
         )
 
 
@@ -170,6 +176,9 @@ fade_out_duration = 500   # Fade-out animation duration in milliseconds
 lock_dir = "/tmp"          # Directory scanned for *_snooze.lock and *_cancel.lock files
 stagger_interval = 5      # Seconds to wait between showing queued reminders
 resume_interval = 3       # Seconds to wait before showing first queued reminder
+work_session_enable = false       # Enable/disable work session feature
+work_session_start = "09:00"      # Work session start time (HH:MM, 24-hour)
+work_session_end = "17:00"        # Work session end time (HH:MM, 24-hour)
 
 [water_break]
 schedule = ["0 * * * *"]  # Every hour

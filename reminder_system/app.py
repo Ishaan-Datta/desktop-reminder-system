@@ -2,6 +2,7 @@
 
 import sys
 import signal
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +14,7 @@ from .config import ConfigManager, ReminderConfig
 from .scheduler import ReminderScheduler
 from .overlay import ReminderOverlay
 from .queue import PersistentReminderQueue
+from .state import PersistentState
 from .tray_window import TrayWindow
 
 
@@ -59,6 +61,9 @@ class ReminderApp(QObject):
         # Persistent queue for reminders (initialized in initialize())
         self._queue: Optional[PersistentReminderQueue] = None
         
+        # Persistent state store (initialized in initialize())
+        self._state: Optional[PersistentState] = None
+        
         # Lock file state tracking (glob-scanned from lock_dir)
         self._lock_was_active: bool = False
         self._snooze_lock_names: list[str] = []  # prefixes from *_snooze.lock files
@@ -79,6 +84,9 @@ class ReminderApp(QObject):
         # Config file watcher for hot reload
         self._config_watcher: Optional[QFileSystemWatcher] = None
         self._reload_timer: Optional[QTimer] = None
+        
+        # Work session timer
+        self._work_session_timer: Optional[QTimer] = None
     
     def initialize(self, skip_scheduler: bool = False) -> bool:
         """
@@ -112,6 +120,10 @@ class ReminderApp(QObject):
             queue_file = self.config_manager.config_dir / "queue.json"
             self._queue = PersistentReminderQueue(queue_file)
             
+            # Initialize persistent state store (survives restarts)
+            state_file = self.config_manager.config_dir / "state.json"
+            self._state = PersistentState(state_file)
+            
             # Set up periodic timer to check lock files and process queue
             self._queue_poll_timer = QTimer()
             self._queue_poll_timer.setInterval(1000)  # Check every second
@@ -120,6 +132,14 @@ class ReminderApp(QObject):
             
             # Set up config file watcher for hot reload
             self._setup_config_watcher()
+            
+            # Set up work session timer (checks once per minute)
+            self._work_session_timer = QTimer()
+            self._work_session_timer.setInterval(15000)  # 15 seconds
+            self._work_session_timer.timeout.connect(self._check_work_session)
+            self._work_session_timer.start()
+            # Run an initial check immediately
+            self._check_work_session()
             
             # Setup system tray (optional)
             if self._enable_tray:
@@ -283,6 +303,70 @@ class ReminderApp(QObject):
         self._cancel_lock_names = cancel_names
         self._snooze_lock_names = snooze_names
         return bool(cancel_names), bool(snooze_names)
+    
+    def _check_work_session(self):
+        """Manage the work-session cancel lock based on the current time.
+        
+        When ``work_session_enable`` is True and the operating mode
+        (from persistent state) is ``"automatic"``:
+        - During the work session window → delete ``work-session_cancel.lock``
+        - Outside the work session window → create ``work-session_cancel.lock``
+        
+        When the operating mode is ``"manual"``, this method does nothing
+        (the lock is managed by the tray UI toggle instead).
+        
+        The lock file lives in ``lock_dir`` and is named
+        ``work-session_cancel.lock`` so the existing glob scanner picks it up.
+        """
+        general = self.config_manager.general
+        lock_dir = Path(general.lock_dir)
+        lock_file = lock_dir / "work-session_cancel.lock"
+        
+        operating_mode = (
+            self._state.get("work_session_operating_mode", "automatic")
+            if self._state else "automatic"
+        )
+        
+        if not general.work_session_enable or operating_mode != "automatic":
+            # Feature disabled or manual mode – automatic management stops.
+            # In manual mode the tray UI manages the lock file directly,
+            # so we must NOT touch it here.
+            if not general.work_session_enable and lock_file.exists():
+                lock_file.unlink()
+                print("Work session: disabled – removed cancel lock")
+            return
+        
+        # Parse HH:MM start / end
+        try:
+            start_h, start_m = (int(x) for x in general.work_session_start.split(":"))
+            end_h, end_m = (int(x) for x in general.work_session_end.split(":"))
+        except (ValueError, AttributeError):
+            print(f"Work session: bad time format "
+                  f"(start={general.work_session_start!r}, end={general.work_session_end!r})")
+            return
+        
+        now = datetime.now()
+        current_minutes = now.hour * 60 + now.minute
+        start_minutes = start_h * 60 + start_m
+        end_minutes = end_h * 60 + end_m
+        
+        # Support overnight ranges (e.g. 22:00 – 06:00)
+        if start_minutes <= end_minutes:
+            in_session = start_minutes <= current_minutes < end_minutes
+        else:
+            in_session = current_minutes >= start_minutes or current_minutes < end_minutes
+        
+        if in_session:
+            # Inside work session → ensure lock is removed
+            if lock_file.exists():
+                lock_file.unlink()
+                print("Work session: now inside schedule – removed cancel lock")
+        else:
+            # Outside work session → ensure lock exists
+            if not lock_file.exists():
+                lock_dir.mkdir(parents=True, exist_ok=True)
+                lock_file.touch()
+                print("Work session: outside schedule – created cancel lock")
     
     def _is_cancel_locked(self) -> bool:
         """Convenience: True when any \*_cancel.lock file exists."""
@@ -533,6 +617,10 @@ class ReminderApp(QObject):
         print(f"Lock dir: {self.config_manager.general.lock_dir}")
         print(f"Cancel locks: {self._cancel_lock_names if self._cancel_lock_names else 'none'}")
         print(f"Snooze locks: {self._snooze_lock_names if self._snooze_lock_names else 'none'}")
+        general = self.config_manager.general
+        ws_status = "enabled" if general.work_session_enable else "disabled"
+        ws_mode = self._state.get("work_session_operating_mode", "automatic") if self._state else "automatic"
+        print(f"Work session: {ws_status} ({general.work_session_start}-{general.work_session_end}, mode={ws_mode})")
         print("=" * 24 + "\n")
     
     def _quit(self):
@@ -544,6 +632,8 @@ class ReminderApp(QObject):
             self._config_watcher.fileChanged.disconnect(self._on_config_file_changed)
         if self._queue_poll_timer:
             self._queue_poll_timer.stop()
+        if self._work_session_timer:
+            self._work_session_timer.stop()
         if self._tray_window:
             self._tray_window.close()
         self.scheduler.stop()

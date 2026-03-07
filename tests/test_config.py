@@ -115,6 +115,9 @@ class TestGeneralConfig:
         assert config.lock_dir == "/tmp"
         assert config.stagger_interval == 5
         assert config.resume_interval == 3
+        assert config.work_session_enable is False
+        assert config.work_session_start == "09:00"
+        assert config.work_session_end == "17:00"
     
     def test_from_dict_full(self):
         """Test creating GeneralConfig from dictionary with all values."""
@@ -127,7 +130,10 @@ class TestGeneralConfig:
             "fade_out_duration": 800,
             "lock_dir": "/run/user/1000/locks",
             "stagger_interval": 10,
-            "resume_interval": 7
+            "resume_interval": 7,
+            "work_session_enable": True,
+            "work_session_start": "08:30",
+            "work_session_end": "18:00",
         }
         config = GeneralConfig.from_dict(settings)
         
@@ -140,6 +146,9 @@ class TestGeneralConfig:
         assert config.lock_dir == "/run/user/1000/locks"
         assert config.stagger_interval == 10
         assert config.resume_interval == 7
+        assert config.work_session_enable is True
+        assert config.work_session_start == "08:30"
+        assert config.work_session_end == "18:00"
     
     def test_from_dict_partial(self):
         """Test creating GeneralConfig with only some values specified."""
@@ -158,6 +167,9 @@ class TestGeneralConfig:
         assert config.lock_dir == "/tmp"  # default
         assert config.stagger_interval == 5  # default
         assert config.resume_interval == 3  # default
+        assert config.work_session_enable is False  # default
+        assert config.work_session_start == "09:00"  # default
+        assert config.work_session_end == "17:00"  # default
     
     def test_from_dict_empty(self):
         """Test creating GeneralConfig from empty dictionary uses defaults."""
@@ -316,6 +328,9 @@ class TestConfigManager:
         assert manager.general.lock_dir == "/tmp/test-reminder-locks"
         assert manager.general.stagger_interval == 2
         assert manager.general.resume_interval == 1
+        assert manager.general.work_session_enable is False
+        assert manager.general.work_session_start == "09:00"
+        assert manager.general.work_session_end == "17:00"
     
     def test_load_config_reminder_with_text(self):
         """Test that reminder text and list schedule are loaded from fixtures."""

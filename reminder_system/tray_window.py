@@ -118,6 +118,16 @@ QPushButton#dangerBtn:hover {
     border-color: #ef5350;
 }
 
+QPushButton#disabledBtn {
+    background: #2e2e2e;
+    color: #666;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 13px;
+    text-align: left;
+}
+
 QScrollArea {
     background: transparent;
     border: none;
@@ -226,6 +236,25 @@ class TrayWindow(QWidget):
         self._clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._clear_btn.clicked.connect(self._clear_queue)
         layout.addWidget(self._clear_btn)
+
+        # ── Work session controls ────────────────────────────────
+        ws_section = QLabel("Work Session")
+        ws_section.setObjectName("section")
+        layout.addWidget(ws_section)
+
+        # Toggle 1: Operating mode (automatic / manual)
+        self._ws_mode_btn = QPushButton("⚙  Mode  —  Automatic")
+        self._ws_mode_btn.setObjectName("actionBtn")
+        self._ws_mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ws_mode_btn.clicked.connect(self._toggle_ws_mode)
+        layout.addWidget(self._ws_mode_btn)
+
+        # Toggle 2: Manual work-session lock (only active in manual mode)
+        self._ws_lock_btn = QPushButton("🔓  Work Session Lock  —  OFF")
+        self._ws_lock_btn.setObjectName("disabledBtn")
+        self._ws_lock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ws_lock_btn.clicked.connect(self._toggle_ws_lock)
+        layout.addWidget(self._ws_lock_btn)
 
         # Status section
         section = QLabel("Status")
@@ -343,6 +372,49 @@ class TrayWindow(QWidget):
             lines.append("✅ No active locks")
 
         self._status_label.setText("\n".join(lines))
+
+        # ── Work session controls ────────────────────────────────
+        general = self._app.config_manager.general
+        ws_enabled = general.work_session_enable
+        state = self._app._state
+        ws_mode = state.get("work_session_operating_mode", "automatic") if state else "automatic"
+        is_manual = ws_mode == "manual"
+
+        # Mode toggle
+        if not ws_enabled:
+            self._ws_mode_btn.setText("⚙  Mode  —  (disabled in config)")
+            self._ws_mode_btn.setObjectName("disabledBtn")
+            self._ws_mode_btn.setEnabled(False)
+        else:
+            self._ws_mode_btn.setEnabled(True)
+            if is_manual:
+                self._ws_mode_btn.setText("⚙  Mode  —  Manual")
+                self._ws_mode_btn.setObjectName("toggleOn")
+            else:
+                self._ws_mode_btn.setText("⚙  Mode  —  Automatic")
+                self._ws_mode_btn.setObjectName("actionBtn")
+        self._ws_mode_btn.style().unpolish(self._ws_mode_btn)
+        self._ws_mode_btn.style().polish(self._ws_mode_btn)
+
+        # Manual lock toggle (only active in manual mode)
+        lock_dir = Path(general.lock_dir)
+        ws_lock_file = lock_dir / "work-session_cancel.lock"
+        ws_lock_exists = ws_lock_file.exists()
+
+        if not ws_enabled or not is_manual:
+            self._ws_lock_btn.setEnabled(False)
+            self._ws_lock_btn.setText("🔓  Work Session Lock  —  OFF")
+            self._ws_lock_btn.setObjectName("disabledBtn")
+        else:
+            self._ws_lock_btn.setEnabled(True)
+            if ws_lock_exists:
+                self._ws_lock_btn.setText("▶  Start Work Session")
+                self._ws_lock_btn.setObjectName("toggleOn")
+            else:
+                self._ws_lock_btn.setText("⏸  Stop Work Session")
+                self._ws_lock_btn.setObjectName("actionBtn")
+        self._ws_lock_btn.style().unpolish(self._ws_lock_btn)
+        self._ws_lock_btn.style().polish(self._ws_lock_btn)
 
     def _refresh_upcoming(self):
         self._clear_layout(self._upcoming_layout)
@@ -466,6 +538,44 @@ class TrayWindow(QWidget):
             lock_dir.mkdir(parents=True, exist_ok=True)
             lock_file.touch()
             print("Tray: snooze lock created")
+
+        self._refresh_controls()
+
+    def _toggle_ws_mode(self):
+        """Switch work session operating mode between automatic and manual."""
+        state = self._app._state
+        if state is None:
+            return
+        current = state.get("work_session_operating_mode", "automatic")
+        new_mode = "manual" if current == "automatic" else "automatic"
+        state.set("work_session_operating_mode", new_mode)
+        print(f"Tray: work session mode → {new_mode}")
+
+        # When switching to automatic, remove the manual lock if present
+        # and let _check_work_session take over.
+        if new_mode == "automatic":
+            lock_dir = Path(self._app.config_manager.general.lock_dir)
+            ws_lock = lock_dir / "work-session_cancel.lock"
+            if ws_lock.exists():
+                ws_lock.unlink()
+                print("Tray: removed manual work-session lock (now automatic)")
+            # Trigger an immediate automatic check
+            self._app._check_work_session()
+
+        self._refresh_controls()
+
+    def _toggle_ws_lock(self):
+        """Toggle the work-session cancel lock file (manual mode only)."""
+        lock_dir = Path(self._app.config_manager.general.lock_dir)
+        lock_file = lock_dir / "work-session_cancel.lock"
+
+        if lock_file.exists():
+            lock_file.unlink()
+            print("Tray: work-session cancel lock removed")
+        else:
+            lock_dir.mkdir(parents=True, exist_ok=True)
+            lock_file.touch()
+            print("Tray: work-session cancel lock created")
 
         self._refresh_controls()
 

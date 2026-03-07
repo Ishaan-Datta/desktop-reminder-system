@@ -12,6 +12,9 @@ fade_out_duration = 500               # Fade-out animation duration in milliseco
 lock_dir = "/tmp/test-reminder-locks" # Directory scanned for lock files
 stagger_interval = 2                  # Seconds to wait between showing queued reminders
 resume_interval = 1                   # Seconds to wait before showing the first queued reminder
+work_session_enable = true            # Work session feature off for tests by default
+work_session_start = "09:00"          # Work session start time (HH:MM, 24-hour)
+work_session_end = "17:00"            # Work session end time (HH:MM, 24-hour)
 
 [test_reminder]
 text = "Something something fr fr"
