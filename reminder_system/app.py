@@ -245,7 +245,7 @@ class ReminderApp(QObject):
         if StatusNotifierBackend.is_supported():
             self._status_notifier = StatusNotifierBackend(
                 icon_factory=self._make_tray_icon,
-                on_activate=self._tray_window.toggle_visibility,
+                on_activate=self._on_status_notifier_activate,
                 on_context_menu=menu.popup,
                 parent=self,
             )
@@ -326,6 +326,17 @@ class ReminderApp(QObject):
         if self._tray_window is None or self.tray_icon is None:
             return
         self._tray_window.toggle_visibility(self.tray_icon.geometry())
+
+    def _on_status_notifier_activate(self, tray_geometry):
+        """Toggle the tray panel using the freshest Wayland activation token."""
+        if self._tray_window is None:
+            return
+
+        activation_token = ""
+        if self._status_notifier is not None:
+            activation_token = self._status_notifier.take_activation_token()
+
+        self._tray_window.toggle_visibility(tray_geometry, activation_token)
     
     def _trigger_reminder_threadsafe(self, name: str):
         """Thread-safe method to trigger a reminder."""

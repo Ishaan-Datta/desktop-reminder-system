@@ -4,6 +4,7 @@ A small dark-themed panel accessible from the system tray icon.
 Contains three switchable pages: Controls, Upcoming, and Queue.
 """
 
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -249,9 +250,9 @@ class TrayWindow(QWidget):
 
         self.setWindowTitle("Reminder System")
         self.setWindowFlags(
-            Qt.WindowType.Tool
+            Qt.WindowType.Popup
             | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.NoDropShadowWindowHint
         )
         self.setFixedSize(340, 400)
         self.setObjectName("TrayWindow")
@@ -639,6 +640,24 @@ class TrayWindow(QWidget):
             if widget:
                 widget.deleteLater()
 
+    def _apply_activation_token(self, activation_token: str) -> Optional[str]:
+        """Seed Qt Wayland with a fresh activation token for the next show."""
+        token = activation_token.strip()
+        if not token or not QGuiApplication.platformName().lower().startswith("wayland"):
+            return None
+
+        previous = os.environ.get("XDG_ACTIVATION_TOKEN")
+        os.environ["XDG_ACTIVATION_TOKEN"] = token
+        return previous
+
+    @staticmethod
+    def _restore_activation_token(previous: Optional[str]):
+        """Restore the activation-token environment after a show attempt."""
+        if previous is None:
+            os.environ.pop("XDG_ACTIVATION_TOKEN", None)
+        else:
+            os.environ["XDG_ACTIVATION_TOKEN"] = previous
+
     # ── Actions ──────────────────────────────────────────────────
 
     def _toggle_snooze(self):
@@ -712,7 +731,11 @@ class TrayWindow(QWidget):
 
     # ── Visibility ───────────────────────────────────────────────
 
-    def toggle_visibility(self, tray_geometry: Optional[QRect] = None):
+    def toggle_visibility(
+        self,
+        tray_geometry: Optional[QRect] = None,
+        activation_token: str = "",
+    ):
         """Show or hide the window, positioning near the tray icon."""
         if self.isVisible():
             self.hide()
@@ -728,9 +751,19 @@ class TrayWindow(QWidget):
         if target is not None:
             self.move(*target)
 
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        previous_token = self._apply_activation_token(activation_token)
+        try:
+            self.show()
+            self.raise_()
+
+            window = self.windowHandle()
+            if window is not None:
+                window.requestActivate()
+            else:
+                self.activateWindow()
+        finally:
+            self._restore_activation_token(previous_token)
+
         self._refresh_current_page()
         self._refresh_timer.start()
 
@@ -742,12 +775,7 @@ class TrayWindow(QWidget):
         super().hideEvent(event)
 
     def changeEvent(self, event):
-        """Auto-hide when the window loses activation (user clicks away)."""
-        if (
-            event.type() == event.Type.ActivationChange
-            and not self.isActiveWindow()
-        ):
-            self.hide()
+        """Let popup semantics handle dismissal on focus changes."""
         super().changeEvent(event)
 
     def keyPressEvent(self, event):

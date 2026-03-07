@@ -147,6 +147,12 @@ class StatusNotifierItem(QObject):
     def ProvideXdgActivationToken(self, token: str):
         self._last_activation_token = token
 
+    def take_activation_token(self) -> str:
+        """Return and clear the most recent XDG activation token."""
+        token = self._last_activation_token
+        self._last_activation_token = ""
+        return token
+
     def update_icon(self, icon_name: str, icon_theme_path: str):
         if self._icon_name == icon_name and self._icon_theme_path == icon_theme_path:
             return
@@ -260,6 +266,10 @@ class StatusNotifierBackend(QObject):
     def set_status(self, status: str):
         """Expose the current SNI status string."""
         self._item.update_status(status)
+
+    def take_activation_token(self) -> str:
+        """Return the freshest XDG activation token captured from the tray host."""
+        return self._item.take_activation_token()
 
     def _on_watcher_owner_changed(self, _service: str, _old_owner: str, new_owner: str):
         if new_owner:
