@@ -35,7 +35,7 @@ class GeneralConfig:
             lock_dir=settings.get("lock_dir", "/tmp"),
             stagger_interval=settings.get("stagger_interval", 5),
             resume_interval=settings.get("resume_interval", 3),
-            work_session_enable=settings.get("work_session_enable", False),
+            work_session_enable=settings.get("work_session_enable", True),
             work_session_start=settings.get("work_session_start", "09:00"),
             work_session_end=settings.get("work_session_end", "17:00"),
         )

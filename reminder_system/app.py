@@ -87,6 +87,9 @@ class ReminderApp(QObject):
         
         # Work session timer
         self._work_session_timer: Optional[QTimer] = None
+        
+        # Track last tray icon color to avoid unnecessary repaints
+        self._last_tray_color: Optional[str] = None
     
     def initialize(self, skip_scheduler: bool = False) -> bool:
         """
@@ -219,26 +222,9 @@ class ReminderApp(QObject):
     
     def _setup_tray(self):
         """Set up the system tray icon and panel window."""
-        # Create a simple icon
-        pixmap = QPixmap(32, 32)
-        pixmap.fill(QColor("transparent"))
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(QColor("#4CAF50"))
-        painter.setPen(QColor("#388E3C"))
-        painter.drawEllipse(2, 2, 28, 28)
-        painter.setPen(QColor("white"))
-        font = painter.font()
-        font.setPointSize(16)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.drawText(pixmap.rect(), 0x0084, "⏰")  # AlignCenter
-        painter.end()
-        
-        icon = QIcon(pixmap)
-        
-        self.tray_icon = QSystemTrayIcon(icon)
+        self.tray_icon = QSystemTrayIcon(self._make_tray_icon("#4CAF50", "#388E3C"))
         self.tray_icon.setToolTip("Reminder System")
+        self._last_tray_color = "green"
         
         # Panel window (shown on left-click)
         self._tray_window = TrayWindow(self)
@@ -265,6 +251,58 @@ class ReminderApp(QObject):
         
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
+    
+    @staticmethod
+    def _make_tray_icon(fill: str, border: str) -> QIcon:
+        """Create a simple circular tray icon with the given colours."""
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(QColor("transparent"))
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(QColor(fill))
+        painter.setPen(QColor(border))
+        painter.drawEllipse(2, 2, 28, 28)
+        painter.setPen(QColor("white"))
+        font = painter.font()
+        font.setPointSize(16)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(pixmap.rect(), 0x0084, "⏰")  # AlignCenter
+        painter.end()
+        return QIcon(pixmap)
+    
+    def _update_tray_icon_color(self):
+        """Set the tray icon colour based on the current lock state.
+        
+        - Green  : no cancel or snooze locks active (normal)
+        - Grey   : at least one cancel lock active
+        - Yellow : at least one snooze lock active (but no cancel lock)
+        """
+        if self.tray_icon is None:
+            return
+        
+        cancel_active = bool(self._cancel_lock_names)
+        snooze_active = bool(self._snooze_lock_names)
+        
+        if cancel_active:
+            desired = "grey"
+        elif snooze_active:
+            desired = "yellow"
+        else:
+            desired = "green"
+        
+        if desired == self._last_tray_color:
+            return  # No change needed
+        
+        self._last_tray_color = desired
+        
+        colours = {
+            "green":  ("#4CAF50", "#388E3C"),
+            "grey":   ("#9E9E9E", "#757575"),
+            "yellow": ("#FFC107", "#FFA000"),
+        }
+        fill, border = colours[desired]
+        self.tray_icon.setIcon(self._make_tray_icon(fill, border))
     
     def _on_tray_activated(self, reason):
         """Toggle tray panel on left-click."""
@@ -481,6 +519,9 @@ class ReminderApp(QObject):
         
         cancel_active, snooze_active = self._scan_lock_files()
         any_lock = cancel_active or snooze_active
+        
+        # Update tray icon colour to reflect current lock state
+        self._update_tray_icon_color()
         
         # While any lock is active, hold the queue
         if any_lock:

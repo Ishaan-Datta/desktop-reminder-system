@@ -1,5 +1,5 @@
 {
-  description = "Desktop Reminder System - KDE Plasma overlay notifications";
+  description = "Desktop Reminder System";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -35,7 +35,6 @@
     let
       supportedSystems = [
         "x86_64-linux"
-        "aarch64-linux"
       ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
@@ -120,7 +119,6 @@
               echo "Run 'uv run python run.py' to start the app"
               echo "Run 'uv run python -m tests.manual_trigger' to test overlay"
 
-              # Qt6 setup for Wayland/X11
               export QT_QPA_PLATFORM="xcb;wayland"
               export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/${pkgs.qt6.qtbase.qtPluginPrefix}"
             '';
@@ -201,118 +199,5 @@
           };
         }
       );
-
-      # NixOS module for system integration
-      nixosModules.default =
-        {
-          config,
-          lib,
-          pkgs,
-          ...
-        }:
-        with lib;
-        let
-          cfg = config.services.reminder-system;
-        in
-        {
-          options.services.reminder-system = {
-            enable = mkEnableOption "Desktop Reminder System";
-
-            configFile = mkOption {
-              type = types.nullOr types.path;
-              default = null;
-              description = "Path to the configuration file";
-            };
-          };
-
-          config = mkIf cfg.enable {
-            environment.systemPackages = [ self.packages.${pkgs.system}.default ];
-
-            # User service would be set up via home-manager typically
-          };
-        };
-
-      # Home-manager module
-      homeManagerModules.default =
-        {
-          config,
-          lib,
-          pkgs,
-          ...
-        }:
-        with lib;
-        let
-          cfg = config.services.reminder-system;
-        in
-        {
-          options.services.reminder-system = {
-            enable = mkEnableOption "Desktop Reminder System";
-
-            package = mkOption {
-              type = types.package;
-              default = self.packages.${pkgs.system}.default;
-              description = "The reminder-system package to use";
-            };
-
-            settings = mkOption {
-              type = types.attrsOf (
-                types.submodule {
-                  options = {
-                    schedule = mkOption {
-                      type = types.str;
-                      description = "Cron expression for the reminder";
-                    };
-                    icon = mkOption {
-                      type = types.str;
-                      description = "Icon filename (PNG)";
-                    };
-                    snooze_duration = mkOption {
-                      type = types.int;
-                      default = 300;
-                      description = "Snooze duration in seconds";
-                    };
-                  };
-                }
-              );
-              default = { };
-              description = "Reminder configurations";
-            };
-          };
-
-          config = mkIf cfg.enable {
-            home.packages = [ cfg.package ];
-
-            # Generate config file
-            xdg.configFile."reminder-system/config.toml".text =
-              let
-                toToml = name: value: ''
-                  [${name}]
-                  schedule = "${value.schedule}"
-                  icon = "${value.icon}"
-                  snooze_duration = ${toString value.snooze_duration}
-                '';
-              in
-              concatStringsSep "\n" (mapAttrsToList toToml cfg.settings);
-
-            # Systemd user service
-            systemd.user.services.reminder-system = {
-              Unit = {
-                Description = "Desktop Reminder System";
-                After = [ "graphical-session.target" ];
-                PartOf = [ "graphical-session.target" ];
-              };
-
-              Service = {
-                ExecStart = "${cfg.package}/bin/reminder-system";
-                Restart = "on-failure";
-                RestartSec = 5;
-              };
-
-              Install = {
-                WantedBy = [ "graphical-session.target" ];
-              };
-            };
-          };
-        };
     };
 }

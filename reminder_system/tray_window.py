@@ -357,17 +357,17 @@ class TrayWindow(QWidget):
             f"🗑  Clear Queue  ({qsize} item{'s' if qsize != 1 else ''})"
         )
 
-        # Lock status
-        snooze_names = getattr(self._app, "_snooze_lock_names", [])
+        # Lock status (cancel first, then snooze)
         cancel_names = getattr(self._app, "_cancel_lock_names", [])
+        snooze_names = getattr(self._app, "_snooze_lock_names", [])
 
         lines: list[str] = []
-        if cancel_names:
-            names = ", ".join(n if n else "(unnamed)" for n in cancel_names)
-            lines.append(f"🚫 Cancel locks: {names}")
-        if snooze_names:
-            names = ", ".join(n if n else "(unnamed)" for n in snooze_names)
-            lines.append(f"⏸ Snooze locks: {names}")
+        for name in sorted(cancel_names):
+            label = name if name else "(unnamed)"
+            lines.append(f"🚫 Cancel: {label}")
+        for name in sorted(snooze_names):
+            label = name if name else "(unnamed)"
+            lines.append(f"⏸ Snooze: {label}")
         if not lines:
             lines.append("✅ No active locks")
 
@@ -539,6 +539,10 @@ class TrayWindow(QWidget):
             lock_file.touch()
             print("Tray: snooze lock created")
 
+        # Immediate rescan so the app reacts without waiting for the
+        # next poll-timer tick.
+        self._app._scan_lock_files()
+        self._app._update_tray_icon_color()
         self._refresh_controls()
 
     def _toggle_ws_mode(self):
@@ -562,6 +566,8 @@ class TrayWindow(QWidget):
             # Trigger an immediate automatic check
             self._app._check_work_session()
 
+        self._app._scan_lock_files()
+        self._app._update_tray_icon_color()
         self._refresh_controls()
 
     def _toggle_ws_lock(self):
@@ -577,6 +583,8 @@ class TrayWindow(QWidget):
             lock_file.touch()
             print("Tray: work-session cancel lock created")
 
+        self._app._scan_lock_files()
+        self._app._update_tray_icon_color()
         self._refresh_controls()
 
     def _clear_queue(self):
@@ -601,21 +609,39 @@ class TrayWindow(QWidget):
         if time.monotonic() - self._last_hide_time < 0.3:
             return
 
-        # Position near tray icon
-        if tray_geometry and not tray_geometry.isNull():
-            screen = QApplication.primaryScreen()
-            if screen:
-                sg = screen.availableGeometry()
-                cx = tray_geometry.center().x()
-                x = max(sg.left(), min(cx - self.width() // 2, sg.right() - self.width()))
+        # Determine anchor point.  Many Linux DEs (KDE Plasma, etc.)
+        # return a null / zero geometry for the tray icon, so fall back
+        # to the current cursor position which is always available.
+        screen = QApplication.primaryScreen()
+        if screen:
+            sg = screen.availableGeometry()
 
-                # Show above tray if it's in the lower half, else below
-                if tray_geometry.top() > sg.height() // 2:
-                    y = tray_geometry.top() - self.height() - 4
-                else:
-                    y = tray_geometry.bottom() + 4
-                y = max(sg.top(), min(y, sg.bottom() - self.height()))
-                self.move(x, y)
+            if tray_geometry and not tray_geometry.isNull() and tray_geometry.width() > 0:
+                anchor_x = tray_geometry.center().x()
+                anchor_top = tray_geometry.top()
+                anchor_bottom = tray_geometry.bottom()
+            else:
+                cursor_pos = QApplication.instance().primaryScreen().geometry().center()
+                try:
+                    from PyQt6.QtGui import QCursor
+                    cursor_pos = QCursor.pos()
+                except Exception:
+                    pass
+                anchor_x = cursor_pos.x()
+                anchor_top = cursor_pos.y()
+                anchor_bottom = cursor_pos.y()
+
+            x = max(sg.left(), min(anchor_x - self.width() // 2, sg.right() - self.width()))
+
+            # Always try to show above the anchor first; only show below
+            # if there isn't enough room above.
+            y_above = anchor_top - self.height() - 4
+            if y_above >= sg.top():
+                y = y_above
+            else:
+                y = anchor_bottom + 4
+            y = max(sg.top(), min(y, sg.bottom() - self.height()))
+            self.move(x, y)
 
         self.show()
         self.raise_()

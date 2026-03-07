@@ -115,7 +115,7 @@ class TestGeneralConfig:
         assert config.lock_dir == "/tmp"
         assert config.stagger_interval == 5
         assert config.resume_interval == 3
-        assert config.work_session_enable is False
+        assert config.work_session_enable is True
         assert config.work_session_start == "09:00"
         assert config.work_session_end == "17:00"
     
@@ -167,7 +167,7 @@ class TestGeneralConfig:
         assert config.lock_dir == "/tmp"  # default
         assert config.stagger_interval == 5  # default
         assert config.resume_interval == 3  # default
-        assert config.work_session_enable is False  # default
+        assert config.work_session_enable is True  # default
         assert config.work_session_start == "09:00"  # default
         assert config.work_session_end == "17:00"  # default
     
@@ -328,7 +328,7 @@ class TestConfigManager:
         assert manager.general.lock_dir == "/tmp/test-reminder-locks"
         assert manager.general.stagger_interval == 2
         assert manager.general.resume_interval == 1
-        assert manager.general.work_session_enable is False
+        assert manager.general.work_session_enable is True
         assert manager.general.work_session_start == "09:00"
         assert manager.general.work_session_end == "17:00"
     
