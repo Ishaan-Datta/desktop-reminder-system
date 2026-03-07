@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QTimer, QRect
+from PyQt6.QtGui import QCursor, QGuiApplication
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QStackedWidget, QScrollArea, QFrame,
@@ -262,6 +263,38 @@ class TrayWindow(QWidget):
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(1000)
         self._refresh_timer.timeout.connect(self._refresh_current_page)
+
+    def _compute_target_position(self, tray_geometry: Optional[QRect] = None) -> Optional[tuple[int, int]]:
+        """Return the best available window position near the tray icon."""
+        if tray_geometry and not tray_geometry.isNull() and tray_geometry.width() > 0:
+            screen = QGuiApplication.screenAt(tray_geometry.center()) or QApplication.primaryScreen()
+            if screen is None:
+                return None
+
+            sg = screen.availableGeometry()
+            anchor_x = tray_geometry.center().x()
+            anchor_top = tray_geometry.top()
+            anchor_bottom = tray_geometry.bottom()
+        else:
+            cursor_pos = QCursor.pos()
+            screen = QGuiApplication.screenAt(cursor_pos) or QApplication.primaryScreen()
+            if screen is None:
+                return None
+
+            sg = screen.availableGeometry()
+            anchor_x = cursor_pos.x()
+            anchor_top = cursor_pos.y()
+            anchor_bottom = cursor_pos.y()
+
+        x = max(sg.left(), min(anchor_x - self.width() // 2, sg.right() - self.width()))
+
+        y_above = anchor_top - self.height() - 4
+        if y_above >= sg.top():
+            y = y_above
+        else:
+            y = anchor_bottom + 4
+        y = max(sg.top(), min(y, sg.bottom() - self.height()))
+        return x, y
 
     # ── UI setup ─────────────────────────────────────────────────
 
@@ -691,39 +724,9 @@ class TrayWindow(QWidget):
         if time.monotonic() - self._last_hide_time < 0.3:
             return
 
-        # Determine anchor point.  Many Linux DEs (KDE Plasma, etc.)
-        # return a null / zero geometry for the tray icon, so fall back
-        # to the current cursor position which is always available.
-        screen = QApplication.primaryScreen()
-        if screen:
-            sg = screen.availableGeometry()
-
-            if tray_geometry and not tray_geometry.isNull() and tray_geometry.width() > 0:
-                anchor_x = tray_geometry.center().x()
-                anchor_top = tray_geometry.top()
-                anchor_bottom = tray_geometry.bottom()
-            else:
-                cursor_pos = QApplication.instance().primaryScreen().geometry().center()
-                try:
-                    from PyQt6.QtGui import QCursor
-                    cursor_pos = QCursor.pos()
-                except Exception:
-                    pass
-                anchor_x = cursor_pos.x()
-                anchor_top = cursor_pos.y()
-                anchor_bottom = cursor_pos.y()
-
-            x = max(sg.left(), min(anchor_x - self.width() // 2, sg.right() - self.width()))
-
-            # Always try to show above the anchor first; only show below
-            # if there isn't enough room above.
-            y_above = anchor_top - self.height() - 4
-            if y_above >= sg.top():
-                y = y_above
-            else:
-                y = anchor_bottom + 4
-            y = max(sg.top(), min(y, sg.bottom() - self.height()))
-            self.move(x, y)
+        target = self._compute_target_position(tray_geometry)
+        if target is not None:
+            self.move(*target)
 
         self.show()
         self.raise_()

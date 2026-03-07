@@ -89,6 +89,14 @@ def main():
         "--ws-end", type=str, default="17:00",
         help="Work session end time HH:MM (default: 17:00)",
     )
+    parser.add_argument(
+        "--start-snooze-lock", action="store_true",
+        help="Create reminder-system_snooze.lock before the app starts",
+    )
+    parser.add_argument(
+        "--start-cancel-lock", action="store_true",
+        help="Create reminder-system_cancel.lock before the app starts",
+    )
     args = parser.parse_args()
 
     # ── Qt setup ─────────────────────────────────────────────────
@@ -130,6 +138,16 @@ def main():
         general.work_session_start = args.ws_start
         general.work_session_end = args.ws_end
 
+    lock_dir = Path(general.lock_dir)
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    if args.start_snooze_lock:
+        (lock_dir / "reminder-system_snooze.lock").touch()
+    if args.start_cancel_lock:
+        (lock_dir / "reminder-system_cancel.lock").touch()
+
+    reminder_app._scan_lock_files()
+    reminder_app._update_tray_icon_color()
+
     # Pre-queue some reminders
     names = list(fake.keys())
     for i in range(min(args.queued, len(names))):
@@ -142,6 +160,8 @@ def main():
     print(f"  Lock dir          : {general.lock_dir}")
     print(f"  Fake reminders    : {len(fake)}")
     print(f"  Pre-queued        : {min(args.queued, len(names))}")
+    print(f"  Startup snooze lock: {'ON' if args.start_snooze_lock else 'OFF'}")
+    print(f"  Startup cancel lock: {'ON' if args.start_cancel_lock else 'OFF'}")
     ws = "ON" if general.work_session_enable else "OFF"
     print(f"  Work session      : {ws}", end="")
     if general.work_session_enable:

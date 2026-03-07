@@ -14,6 +14,7 @@ from .config import ConfigManager, ReminderConfig
 from .scheduler import ReminderScheduler
 from .overlay import ReminderOverlay
 from .queue import PersistentReminderQueue
+from .status_notifier import StatusNotifierBackend
 from .state import PersistentState
 from .tray_window import TrayWindow
 
@@ -48,6 +49,7 @@ class ReminderApp(QObject):
         self.scheduler = ReminderScheduler()
         self.overlay: Optional[ReminderOverlay] = None
         self.tray_icon: Optional[QSystemTrayIcon] = None
+        self._status_notifier: Optional[StatusNotifierBackend] = None
         self._enable_tray = enable_tray
         
         # Bridge for thread-safe Qt signal emission
@@ -90,7 +92,7 @@ class ReminderApp(QObject):
         
         # Track last tray icon color to avoid unnecessary repaints
         self._last_tray_color: Optional[str] = None
-    
+
     def initialize(self, skip_scheduler: bool = False) -> bool:
         """
         Initialize the application.
@@ -222,13 +224,8 @@ class ReminderApp(QObject):
     
     def _setup_tray(self):
         """Set up the system tray icon and panel window."""
-        self.tray_icon = QSystemTrayIcon(self._make_tray_icon("#4CAF50", "#388E3C"))
-        self.tray_icon.setToolTip("Reminder System")
-        self._last_tray_color = "green"
-        
         # Panel window (shown on left-click)
         self._tray_window = TrayWindow(self)
-        self.tray_icon.activated.connect(self._on_tray_activated)
         
         # Right-click context menu
         menu = QMenu()
@@ -242,7 +239,24 @@ class ReminderApp(QObject):
         quit_action = QAction("Quit", menu)
         quit_action.triggered.connect(self._quit)
         menu.addAction(quit_action)
-        
+
+        self._last_tray_color = "green"
+
+        if StatusNotifierBackend.is_supported():
+            self._status_notifier = StatusNotifierBackend(
+                icon_factory=self._make_tray_icon,
+                on_activate=self._tray_window.toggle_visibility,
+                on_context_menu=menu.popup,
+                parent=self,
+            )
+            self._status_notifier.start()
+            self._status_notifier.set_icon_state("green", "#4CAF50", "#388E3C")
+            self._status_notifier.set_status("Active")
+            return
+
+        self.tray_icon = QSystemTrayIcon(self._make_tray_icon("#4CAF50", "#388E3C"))
+        self.tray_icon.setToolTip("Reminder System")
+        self.tray_icon.activated.connect(self._on_tray_activated)
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.show()
     
@@ -272,7 +286,7 @@ class ReminderApp(QObject):
         - Grey   : at least one cancel lock active
         - Yellow : at least one snooze lock active (but no cancel lock)
         """
-        if self.tray_icon is None:
+        if self.tray_icon is None and self._status_notifier is None:
             return
         
         cancel_active = bool(self._cancel_lock_names)
@@ -296,12 +310,22 @@ class ReminderApp(QObject):
             "yellow": ("#FFC107", "#FFA000"),
         }
         fill, border = colours[desired]
-        self.tray_icon.setIcon(self._make_tray_icon(fill, border))
+        if self._status_notifier is not None:
+            self._status_notifier.set_icon_state(desired, fill, border)
+            self._status_notifier.set_status("Active")
+        elif self.tray_icon is not None:
+            self.tray_icon.setIcon(self._make_tray_icon(fill, border))
     
     def _on_tray_activated(self, reason):
         """Toggle tray panel on left-click."""
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self._tray_window.toggle_visibility(self.tray_icon.geometry())
+            self._toggle_tray_window_from_activation()
+
+    def _toggle_tray_window_from_activation(self):
+        """Open or close the tray window after a tray activation."""
+        if self._tray_window is None or self.tray_icon is None:
+            return
+        self._tray_window.toggle_visibility(self.tray_icon.geometry())
     
     def _trigger_reminder_threadsafe(self, name: str):
         """Thread-safe method to trigger a reminder."""
@@ -669,6 +693,8 @@ class ReminderApp(QObject):
             self._queue_poll_timer.stop()
         if self._work_session_timer:
             self._work_session_timer.stop()
+        if self._status_notifier:
+            self._status_notifier.stop()
         if self._tray_window:
             self._tray_window.close()
         self.scheduler.stop()
