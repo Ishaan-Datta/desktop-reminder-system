@@ -233,12 +233,6 @@ class ReminderApp(QObject):
         # Right-click context menu
         menu = QMenu()
         
-        status_action = QAction("Reminder System", menu)
-        status_action.setEnabled(False)
-        menu.addAction(status_action)
-        
-        menu.addSeparator()
-        
         show_status = QAction("Print Status", menu)
         show_status.triggered.connect(self._show_status)
         menu.addAction(show_status)

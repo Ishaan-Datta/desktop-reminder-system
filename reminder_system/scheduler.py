@@ -43,8 +43,14 @@ class ScheduledReminder:
         self.calculate_next_run()
     
     def get_effective_next_run(self) -> datetime:
-        """Get the effective next run time considering snooze."""
-        if self.snoozed_until and self.snoozed_until > datetime.now():
+        """Get the effective next run time considering snooze.
+
+        If ``snoozed_until`` is set, it remains the effective next run until
+        the scheduler consumes it and clears the snooze. This prevents short
+        snoozes from being missed if the scheduler loop checks slightly after
+        the snooze deadline has passed.
+        """
+        if self.snoozed_until is not None:
             return self.snoozed_until
         return self.next_run
 
@@ -113,6 +119,9 @@ class ReminderScheduler:
         with self._lock:
             if name in self.reminders:
                 snoozed_until = self.reminders[name].snooze(seconds)
+                # Allow a reminder that already fired this minute to trigger
+                # again when a short snooze expires before the minute rolls over.
+                self._triggered_this_minute.discard(name)
                 print(f"Snoozed '{name}' until {snoozed_until}")
     
     def complete_reminder(self, name: str) -> None:

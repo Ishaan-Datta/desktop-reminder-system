@@ -101,6 +101,20 @@ class TestScheduledReminder:
         assert effective < next_run
         assert effective > datetime.now()
 
+    def test_get_effective_next_run_with_expired_snooze(self):
+        """Expired snoozes remain due until the scheduler consumes them."""
+        next_run = datetime.now() + timedelta(hours=1)
+        expired_snooze = datetime.now() - timedelta(seconds=5)
+        reminder = ScheduledReminder(
+            name="test",
+            cron_expressions=["0 * * * *"],
+            callback=Mock(),
+            next_runs=[next_run],
+            snoozed_until=expired_snooze,
+        )
+
+        assert reminder.get_effective_next_run() == expired_snooze
+
 
 class TestReminderScheduler:
     """Tests for ReminderScheduler class."""
@@ -152,6 +166,17 @@ class TestReminderScheduler:
         
         scheduler.snooze_reminder("test", 120)
         
+        assert scheduler.reminders["test"].snoozed_until is not None
+
+    def test_snooze_reminder_clears_same_minute_trigger_guard(self):
+        """Test snoozing allows a same-minute re-trigger after expiry."""
+        scheduler = ReminderScheduler()
+        scheduler.add_reminder("test", "0 * * * *", Mock())
+
+        scheduler._triggered_this_minute.add("test")
+        scheduler.snooze_reminder("test", 15)
+
+        assert "test" not in scheduler._triggered_this_minute
         assert scheduler.reminders["test"].snoozed_until is not None
     
     def test_complete_reminder(self):

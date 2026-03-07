@@ -47,7 +47,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 def build_fake_reminders(config_dir: Path) -> dict[str, ReminderConfig]:
     """Generate a small set of reminders for interactive testing."""
     entries = [
-        ("water_break",   "💧", "Time to drink some water!",       "0 * * * *",      300),
+        ("water_break",   "💧", "Time to drink some water!",       "0 * * * *",      15),
         ("stretch_break", "🧘", "Stand up and stretch!",           "*/30 9-17 * * 1-5", 600),
         ("eye_rest",      "👁", "Look away for 20 seconds",        "*/20 * * * *",   120),
         ("posture_check", "🪑", "Check your posture!",             "*/15 * * * *",   180),
@@ -116,7 +116,9 @@ def main():
         reminder_app.scheduler.add_reminder(
             name=name,
             cron_expression=cfg.schedule,
-            callback=lambda n: None,  # no-op callback
+            # Use the real app trigger path so snoozed reminders can fire again
+            # and re-enter the queue/overlay flow during manual testing.
+            callback=reminder_app._trigger_reminder_threadsafe,
         )
 
     # Apply CLI overrides

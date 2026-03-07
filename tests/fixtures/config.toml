@@ -20,4 +20,4 @@ work_session_end = "17:00"            # Work session end time (HH:MM, 24-hour)
 text = "Something something fr fr"
 schedule = ["* * * * *"]
 icon = "test_icon.png"
-snooze_duration = 10
+snooze_duration = 1
