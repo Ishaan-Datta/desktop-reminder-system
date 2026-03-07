@@ -13,7 +13,7 @@ from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QStackedWidget, QScrollArea, QFrame,
-    QApplication,
+    QApplication, QSizePolicy,
 )
 
 if TYPE_CHECKING:
@@ -80,6 +80,8 @@ QPushButton#actionBtn {
     border: 1px solid #555;
     border-radius: 6px;
     padding: 10px 16px;
+    min-height: 20px;
+    max-height: 20px;
     font-size: 13px;
     text-align: left;
 }
@@ -95,6 +97,8 @@ QPushButton#toggleOn {
     border: 1px solid #4CAF50;
     border-radius: 6px;
     padding: 10px 16px;
+    min-height: 20px;
+    max-height: 20px;
     font-size: 13px;
     text-align: left;
 }
@@ -109,6 +113,8 @@ QPushButton#dangerBtn {
     border: 1px solid #555;
     border-radius: 6px;
     padding: 10px 16px;
+    min-height: 20px;
+    max-height: 20px;
     font-size: 13px;
     text-align: left;
 }
@@ -124,6 +130,8 @@ QPushButton#disabledBtn {
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     padding: 10px 16px;
+    min-height: 20px;
+    max-height: 20px;
     font-size: 13px;
     text-align: left;
 }
@@ -143,6 +151,79 @@ QFrame#card {
     border-radius: 6px;
 }
 """
+
+
+CONTROL_BUTTON_HEIGHT = 42
+CONTROL_BUTTON_ICON_WIDTH = 22
+
+
+class ControlButton(QPushButton):
+    """Push button with a fixed-size emoji slot and centered label text."""
+
+    _TEXT_COLORS = {
+        "actionBtn": "#e0e0e0",
+        "toggleOn": "#ffffff",
+        "dangerBtn": "#ef5350",
+        "disabledBtn": "#666666",
+    }
+
+    def __init__(self, emoji: str, label: str, parent=None):
+        super().__init__(parent)
+        self._emoji = emoji
+        self._label = label
+
+        self.setText("")
+        self.setFixedHeight(CONTROL_BUTTON_HEIGHT)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 0, 16, 0)
+        layout.setSpacing(8)
+
+        self._emoji_label = QLabel(emoji, self)
+        self._emoji_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._emoji_label.setFixedWidth(CONTROL_BUTTON_ICON_WIDTH)
+        self._emoji_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        self._text_label = QLabel(label, self)
+        self._text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._text_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        self._text_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        self._right_spacer = QWidget(self)
+        self._right_spacer.setFixedWidth(CONTROL_BUTTON_ICON_WIDTH)
+        self._right_spacer.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        layout.addWidget(self._emoji_label)
+        layout.addWidget(self._text_label, 1)
+        layout.addWidget(self._right_spacer)
+
+        self._sync_label_appearance()
+
+    def set_content(self, emoji: str, label: str):
+        self._emoji = emoji
+        self._label = label
+        self._emoji_label.setText(emoji)
+        self._text_label.setText(label)
+        self.setAccessibleName(f"{emoji} {label}")
+
+    def setObjectName(self, name: str):
+        super().setObjectName(name)
+        if hasattr(self, "_text_label"):
+            self._sync_label_appearance()
+
+    def _sync_label_appearance(self):
+        color = self._TEXT_COLORS.get(self.objectName(), "#e0e0e0")
+
+        font = self.font()
+        self._emoji_label.setFont(font)
+        self._text_label.setFont(font)
+
+        label_style = f"color: {color}; background: transparent;"
+        self._emoji_label.setStyleSheet(label_style)
+        self._text_label.setStyleSheet(label_style)
 
 
 class TrayWindow(QWidget):
@@ -224,14 +305,14 @@ class TrayWindow(QWidget):
         layout.setSpacing(8)
 
         # Snooze toggle button
-        self._snooze_btn = QPushButton("⏸  Snooze  —  OFF")
+        self._snooze_btn = ControlButton("⏸", "Snooze  —  OFF")
         self._snooze_btn.setObjectName("actionBtn")
         self._snooze_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._snooze_btn.clicked.connect(self._toggle_snooze)
         layout.addWidget(self._snooze_btn)
 
         # Clear queue button
-        self._clear_btn = QPushButton("🗑  Clear Queue")
+        self._clear_btn = ControlButton("🗑", "Clear Queue")
         self._clear_btn.setObjectName("dangerBtn")
         self._clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._clear_btn.clicked.connect(self._clear_queue)
@@ -243,14 +324,14 @@ class TrayWindow(QWidget):
         layout.addWidget(ws_section)
 
         # Toggle 1: Operating mode (automatic / manual)
-        self._ws_mode_btn = QPushButton("⚙  Mode  —  Automatic")
+        self._ws_mode_btn = ControlButton("⚙", "Mode  —  Automatic")
         self._ws_mode_btn.setObjectName("actionBtn")
         self._ws_mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._ws_mode_btn.clicked.connect(self._toggle_ws_mode)
         layout.addWidget(self._ws_mode_btn)
 
         # Toggle 2: Manual work-session lock (only active in manual mode)
-        self._ws_lock_btn = QPushButton("🔓  Work Session Lock  —  OFF")
+        self._ws_lock_btn = ControlButton("🔓", "Work Session Lock  —  OFF")
         self._ws_lock_btn.setObjectName("disabledBtn")
         self._ws_lock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._ws_lock_btn.clicked.connect(self._toggle_ws_lock)
@@ -343,18 +424,19 @@ class TrayWindow(QWidget):
         is_on = own_lock.exists()
 
         if is_on:
-            self._snooze_btn.setText("⏸  Snooze  —  ON")
+            self._snooze_btn.set_content("⏸", "Snooze  —  ON")
             self._snooze_btn.setObjectName("toggleOn")
         else:
-            self._snooze_btn.setText("⏸  Snooze  —  OFF")
+            self._snooze_btn.set_content("⏸", "Snooze  —  OFF")
             self._snooze_btn.setObjectName("actionBtn")
         self._snooze_btn.style().unpolish(self._snooze_btn)
         self._snooze_btn.style().polish(self._snooze_btn)
 
         # Queue count
         qsize = self._app._queue.size() if self._app._queue else 0
-        self._clear_btn.setText(
-            f"🗑  Clear Queue  ({qsize} item{'s' if qsize != 1 else ''})"
+        self._clear_btn.set_content(
+            "🗑",
+            f"Clear Queue  ({qsize} item{'s' if qsize != 1 else ''})"
         )
 
         # Lock status (cancel first, then snooze)
@@ -382,16 +464,16 @@ class TrayWindow(QWidget):
 
         # Mode toggle
         if not ws_enabled:
-            self._ws_mode_btn.setText("⚙  Mode  —  (disabled in config)")
+            self._ws_mode_btn.set_content("⚙", "Mode  —  (disabled in config)")
             self._ws_mode_btn.setObjectName("disabledBtn")
             self._ws_mode_btn.setEnabled(False)
         else:
             self._ws_mode_btn.setEnabled(True)
             if is_manual:
-                self._ws_mode_btn.setText("⚙  Mode  —  Manual")
+                self._ws_mode_btn.set_content("⚙", "Mode  —  Manual")
                 self._ws_mode_btn.setObjectName("toggleOn")
             else:
-                self._ws_mode_btn.setText("⚙  Mode  —  Automatic")
+                self._ws_mode_btn.set_content("⚙", "Mode  —  Automatic")
                 self._ws_mode_btn.setObjectName("actionBtn")
         self._ws_mode_btn.style().unpolish(self._ws_mode_btn)
         self._ws_mode_btn.style().polish(self._ws_mode_btn)
@@ -403,15 +485,15 @@ class TrayWindow(QWidget):
 
         if not ws_enabled or not is_manual:
             self._ws_lock_btn.setEnabled(False)
-            self._ws_lock_btn.setText("🔓  Work Session Lock  —  OFF")
+            self._ws_lock_btn.set_content("🔓", "Work Session Lock  —  OFF")
             self._ws_lock_btn.setObjectName("disabledBtn")
         else:
             self._ws_lock_btn.setEnabled(True)
             if ws_lock_exists:
-                self._ws_lock_btn.setText("▶  Start Work Session")
+                self._ws_lock_btn.set_content("▶", "Start Work Session")
                 self._ws_lock_btn.setObjectName("toggleOn")
             else:
-                self._ws_lock_btn.setText("⏸  Stop Work Session")
+                self._ws_lock_btn.set_content("⏸", "Stop Work Session")
                 self._ws_lock_btn.setObjectName("actionBtn")
         self._ws_lock_btn.style().unpolish(self._ws_lock_btn)
         self._ws_lock_btn.style().polish(self._ws_lock_btn)
