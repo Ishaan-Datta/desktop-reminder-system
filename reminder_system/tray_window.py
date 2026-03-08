@@ -10,12 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QTimer, QRect
-from PyQt6.QtGui import QCursor, QGuiApplication
+from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QEvent
+from PyQt6.QtGui import QCursor, QGuiApplication, QIcon
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QStackedWidget, QScrollArea, QFrame,
-    QApplication, QSizePolicy,
+    QApplication, QSizePolicy, QStyle,
 )
 
 if TYPE_CHECKING:
@@ -156,11 +156,100 @@ QFrame#card {
 
 
 CONTROL_BUTTON_HEIGHT = 42
+CONTROL_BUTTON_ICON_SIZE = QSize(18, 18)
 CONTROL_BUTTON_ICON_WIDTH = 22
+
+# Change this single value to quickly try a different icon pack mapping.
+# Each candidate below may be either an icon-theme name or a file path.
+ACTIVE_CONTROL_ICON_THEME = "system-symbolic"
+
+CONTROL_BUTTON_ICON_THEMES: dict[str, dict[str, tuple[str, ...]]] = {
+    "system-symbolic": {
+        "pause": (
+            "media-playback-pause-symbolic",
+            "media-playback-pause",
+        ),
+        "play": (
+            "media-playback-start-symbolic",
+            "media-playback-start",
+        ),
+        "settings": (
+            "settings-symbolic",
+            "settings-configure-symbolic",
+            "settings-configure",
+            "preferences-system-symbolic",
+            "preferences-system",
+        ),
+        "lock-open": (
+            "lock-open-symbolic",
+            "object-unlocked-symbolic",
+            "lock-open",
+        ),
+    },
+    "material-symbols-outlined": {
+        "pause": (
+            "pause_circle",
+            "pause",
+            "media-playback-pause-symbolic",
+        ),
+        "play": (
+            "play_circle",
+            "play_arrow",
+            "media-playback-start-symbolic",
+        ),
+        "settings": (
+            "settings",
+            "tune",
+            "settings-symbolic",
+        ),
+        "lock-open": (
+            "lock_open",
+            "lock_open_right",
+            "lock-open-symbolic",
+        ),
+    },
+}
+
+CONTROL_BUTTON_ICON_FALLBACKS: dict[str, QStyle.StandardPixmap] = {
+    "pause": QStyle.StandardPixmap.SP_MediaPause,
+    "play": QStyle.StandardPixmap.SP_MediaPlay,
+    "settings": QStyle.StandardPixmap.SP_FileDialogDetailedView,
+    "lock-open": QStyle.StandardPixmap.SP_DialogResetButton,
+}
+
+
+def _load_icon_candidate(candidate: str) -> QIcon:
+    """Load an icon from a theme name or from a file path."""
+    path = Path(candidate).expanduser()
+    if path.suffix or path.is_absolute() or "/" in candidate:
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parent.parent / path
+        if path.exists():
+            return QIcon(str(path))
+    return QIcon.fromTheme(candidate)
+
+
+def _resolve_control_icon(icon_name: str, style: Optional[QStyle]) -> QIcon:
+    """Resolve the configured icon for a logical tray-button icon name."""
+    theme = CONTROL_BUTTON_ICON_THEMES.get(
+        ACTIVE_CONTROL_ICON_THEME,
+        CONTROL_BUTTON_ICON_THEMES["system-symbolic"],
+    )
+
+    for candidate in theme.get(icon_name, ()):
+        icon = _load_icon_candidate(candidate)
+        if not icon.isNull():
+            return icon
+
+    fallback = CONTROL_BUTTON_ICON_FALLBACKS.get(icon_name)
+    if fallback is not None and style is not None:
+        return style.standardIcon(fallback)
+
+    return QIcon()
 
 
 class ControlButton(QPushButton):
-    """Push button with a fixed-size emoji slot and centered label text."""
+    """Push button with a fixed-size icon slot and centered label text."""
 
     _TEXT_COLORS = {
         "actionBtn": "#e0e0e0",
@@ -169,9 +258,9 @@ class ControlButton(QPushButton):
         "disabledBtn": "#666666",
     }
 
-    def __init__(self, emoji: str, label: str, parent=None):
+    def __init__(self, icon_name: str, label: str, parent=None):
         super().__init__(parent)
-        self._emoji = emoji
+        self._icon_name = icon_name
         self._label = label
 
         self.setText("")
@@ -181,10 +270,10 @@ class ControlButton(QPushButton):
         layout.setContentsMargins(16, 0, 16, 0)
         layout.setSpacing(8)
 
-        self._emoji_label = QLabel(emoji, self)
-        self._emoji_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._emoji_label.setFixedWidth(CONTROL_BUTTON_ICON_WIDTH)
-        self._emoji_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._icon_label = QLabel(self)
+        self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._icon_label.setFixedWidth(CONTROL_BUTTON_ICON_WIDTH)
+        self._icon_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         self._text_label = QLabel(label, self)
         self._text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -198,33 +287,43 @@ class ControlButton(QPushButton):
         self._right_spacer.setFixedWidth(CONTROL_BUTTON_ICON_WIDTH)
         self._right_spacer.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        layout.addWidget(self._emoji_label)
+        layout.addWidget(self._icon_label)
         layout.addWidget(self._text_label, 1)
         layout.addWidget(self._right_spacer)
 
         self._sync_label_appearance()
+        self._sync_icon()
 
-    def set_content(self, emoji: str, label: str):
-        self._emoji = emoji
+    def set_content(self, icon_name: str, label: str):
+        self._icon_name = icon_name
         self._label = label
-        self._emoji_label.setText(emoji)
         self._text_label.setText(label)
-        self.setAccessibleName(f"{emoji} {label}")
+        self.setAccessibleName(label)
+        self._sync_icon()
 
     def setObjectName(self, name: str):
         super().setObjectName(name)
         if hasattr(self, "_text_label"):
             self._sync_label_appearance()
 
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.EnabledChange and hasattr(self, "_icon_label"):
+            self._sync_icon()
+
+    def _sync_icon(self):
+        icon = _resolve_control_icon(self._icon_name, self.style())
+        mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
+        pixmap = icon.pixmap(CONTROL_BUTTON_ICON_SIZE, mode)
+        self._icon_label.setPixmap(pixmap)
+
     def _sync_label_appearance(self):
         color = self._TEXT_COLORS.get(self.objectName(), "#e0e0e0")
 
         font = self.font()
-        self._emoji_label.setFont(font)
         self._text_label.setFont(font)
 
         label_style = f"color: {color}; background: transparent;"
-        self._emoji_label.setStyleSheet(label_style)
         self._text_label.setStyleSheet(label_style)
 
 
@@ -339,7 +438,7 @@ class TrayWindow(QWidget):
         layout.setSpacing(8)
 
         # Snooze toggle button
-        self._snooze_btn = ControlButton("⏸", "Snooze  —  OFF")
+        self._snooze_btn = ControlButton("pause", "Snooze  —  OFF")
         self._snooze_btn.setObjectName("actionBtn")
         self._snooze_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._snooze_btn.clicked.connect(self._toggle_snooze)
@@ -351,14 +450,14 @@ class TrayWindow(QWidget):
         layout.addWidget(ws_section)
 
         # Toggle 1: Operating mode (automatic / manual)
-        self._ws_mode_btn = ControlButton("⚙", "Mode  —  Automatic")
+        self._ws_mode_btn = ControlButton("settings", "Mode  —  Automatic")
         self._ws_mode_btn.setObjectName("actionBtn")
         self._ws_mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._ws_mode_btn.clicked.connect(self._toggle_ws_mode)
         layout.addWidget(self._ws_mode_btn)
 
         # Toggle 2: Manual work-session lock (only active in manual mode)
-        self._ws_lock_btn = ControlButton("🔓", "Work Session Lock  —  OFF")
+        self._ws_lock_btn = ControlButton("lock-open", "Work Session Lock  —  OFF")
         self._ws_lock_btn.setObjectName("disabledBtn")
         self._ws_lock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._ws_lock_btn.clicked.connect(self._toggle_ws_lock)
@@ -455,10 +554,10 @@ class TrayWindow(QWidget):
         is_on = own_lock.exists()
 
         if is_on:
-            self._snooze_btn.set_content("⏸", "Snooze  —  ON")
+            self._snooze_btn.set_content("pause", "Snooze  —  ON")
             self._snooze_btn.setObjectName("toggleOn")
         else:
-            self._snooze_btn.set_content("⏸", "Snooze  —  OFF")
+            self._snooze_btn.set_content("pause", "Snooze  —  OFF")
             self._snooze_btn.setObjectName("actionBtn")
         self._snooze_btn.style().unpolish(self._snooze_btn)
         self._snooze_btn.style().polish(self._snooze_btn)
@@ -491,16 +590,16 @@ class TrayWindow(QWidget):
 
         # Mode toggle
         if not ws_enabled:
-            self._ws_mode_btn.set_content("⚙", "Mode  —  (disabled in config)")
+            self._ws_mode_btn.set_content("settings", "Mode  —  (disabled in config)")
             self._ws_mode_btn.setObjectName("disabledBtn")
             self._ws_mode_btn.setEnabled(False)
         else:
             self._ws_mode_btn.setEnabled(True)
             if is_manual:
-                self._ws_mode_btn.set_content("⚙", "Mode  —  Manual")
+                self._ws_mode_btn.set_content("settings", "Mode  —  Manual")
                 self._ws_mode_btn.setObjectName("toggleOn")
             else:
-                self._ws_mode_btn.set_content("⚙", "Mode  —  Automatic")
+                self._ws_mode_btn.set_content("settings", "Mode  —  Automatic")
                 self._ws_mode_btn.setObjectName("actionBtn")
         self._ws_mode_btn.style().unpolish(self._ws_mode_btn)
         self._ws_mode_btn.style().polish(self._ws_mode_btn)
@@ -512,15 +611,15 @@ class TrayWindow(QWidget):
 
         if not ws_enabled or not is_manual:
             self._ws_lock_btn.setEnabled(False)
-            self._ws_lock_btn.set_content("🔓", "Work Session Lock  —  OFF")
+            self._ws_lock_btn.set_content("lock-open", "Work Session Lock  —  OFF")
             self._ws_lock_btn.setObjectName("disabledBtn")
         else:
             self._ws_lock_btn.setEnabled(True)
             if ws_lock_exists:
-                self._ws_lock_btn.set_content("▶", "Start Work Session")
+                self._ws_lock_btn.set_content("play", "Start Work Session")
                 self._ws_lock_btn.setObjectName("toggleOn")
             else:
-                self._ws_lock_btn.set_content("⏸", "Stop Work Session")
+                self._ws_lock_btn.set_content("pause", "Stop Work Session")
                 self._ws_lock_btn.setObjectName("actionBtn")
         self._ws_lock_btn.style().unpolish(self._ws_lock_btn)
         self._ws_lock_btn.style().polish(self._ws_lock_btn)
