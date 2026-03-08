@@ -233,19 +233,19 @@ class TrayWindow(QWidget):
     Panel window shown from the system tray icon.
 
     Three switchable pages:
-      0 – Controls  : snooze toggle, clear queue, lock status
-      1 – Upcoming  : next scheduled reminders sorted by time
-      2 – Queue     : currently queued reminders in order
+      0 – Upcoming  : next scheduled reminders sorted by time
+      1 – Queue     : currently queued reminders in order
+      2 – Controls  : snooze toggle, clear queue, lock status
     """
 
-    PAGE_CONTROLS = 0
-    PAGE_UPCOMING = 1
-    PAGE_QUEUE = 2
+    PAGE_UPCOMING = 0
+    PAGE_QUEUE = 1
+    PAGE_CONTROLS = 2
 
     def __init__(self, app: "ReminderApp", parent=None):
         super().__init__(parent)
         self._app = app
-        self._current_page = self.PAGE_CONTROLS
+        self._current_page = self.PAGE_UPCOMING
         self._last_hide_time: float = 0.0
 
         self.setWindowTitle("Reminder System")
@@ -313,7 +313,7 @@ class TrayWindow(QWidget):
         nav = QHBoxLayout()
         nav.setSpacing(4)
         self._nav_buttons: list[QPushButton] = []
-        for label, idx in [("Controls", 0), ("Upcoming", 1), ("Queue", 2)]:
+        for label, idx in [("Upcoming", 0), ("Queue", 1), ("Controls", 2)]:
             btn = QPushButton(label)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda _checked, i=idx: self._switch_page(i))
@@ -323,9 +323,9 @@ class TrayWindow(QWidget):
 
         # Page stack
         self._stack = QStackedWidget()
-        self._stack.addWidget(self._build_controls_page())
         self._stack.addWidget(self._build_upcoming_page())
         self._stack.addWidget(self._build_queue_page())
+        self._stack.addWidget(self._build_controls_page())
         root.addWidget(self._stack)
 
         self._update_nav_style()
@@ -709,6 +709,7 @@ class TrayWindow(QWidget):
             lock_dir.mkdir(parents=True, exist_ok=True)
             lock_file.touch()
             print("Tray: work-session cancel lock created")
+            self._app._clear_queue_for_cancel_lock("manual work session")
 
         self._app._scan_lock_files()
         self._app._update_tray_icon_color()
