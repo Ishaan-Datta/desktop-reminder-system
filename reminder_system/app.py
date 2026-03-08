@@ -4,7 +4,7 @@ import sys
 import signal
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QAction
@@ -93,12 +93,27 @@ class ReminderApp(QObject):
         # Track last tray icon color to avoid unnecessary repaints
         self._last_tray_color: Optional[str] = None
 
-    def initialize(self, skip_scheduler: bool = False) -> bool:
+    def _apply_general_overrides(self, general_overrides: Optional[dict[str, Any]]) -> None:
+        """Apply caller-provided general config overrides before startup."""
+        if not general_overrides:
+            return
+
+        for key, value in general_overrides.items():
+            if not hasattr(self.config_manager.general, key):
+                raise AttributeError(f"Unknown general config override: {key}")
+            setattr(self.config_manager.general, key, value)
+
+    def initialize(
+        self,
+        skip_scheduler: bool = False,
+        general_overrides: Optional[dict[str, Any]] = None,
+    ) -> bool:
         """
         Initialize the application.
         
         Args:
             skip_scheduler: If True, don't schedule reminders (useful for testing)
+            general_overrides: Optional overrides for loaded general config
             
         Returns:
             True on success
@@ -106,6 +121,7 @@ class ReminderApp(QObject):
         try:
             # Load configuration
             reminders = self.config_manager.load_config()
+            self._apply_general_overrides(general_overrides)
             
             if not reminders:
                 print("No reminders configured. Please add reminders to the config file.")
@@ -128,6 +144,12 @@ class ReminderApp(QObject):
             # Initialize persistent state store (survives restarts)
             state_file = self.config_manager.config_dir / "state.json"
             self._state = PersistentState(state_file)
+
+            # Prime work-session and lock state before creating the tray UI so
+            # the first painted icon/panel contents already match reality.
+            self._check_work_session()
+            cancel_active, snooze_active = self._scan_lock_files()
+            self._lock_was_active = cancel_active or snooze_active
             
             # Set up periodic timer to check lock files and process queue
             self._queue_poll_timer = QTimer()
@@ -143,8 +165,6 @@ class ReminderApp(QObject):
             self._work_session_timer.setInterval(15000)  # 15 seconds
             self._work_session_timer.timeout.connect(self._check_work_session)
             self._work_session_timer.start()
-            # Run an initial check immediately
-            self._check_work_session()
             
             # Setup system tray (optional)
             if self._enable_tray:
@@ -226,6 +246,7 @@ class ReminderApp(QObject):
         """Set up the system tray icon and panel window."""
         # Panel window (shown on left-click)
         self._tray_window = TrayWindow(self)
+        self._tray_window.refresh_contents()
         
         # Right-click context menu
         menu = QMenu()
@@ -240,7 +261,9 @@ class ReminderApp(QObject):
         quit_action.triggered.connect(self._quit)
         menu.addAction(quit_action)
 
-        self._last_tray_color = "green"
+        desired = self._get_tray_icon_state()
+        fill, border = self._get_tray_icon_colours(desired)
+        self._last_tray_color = desired
 
         if StatusNotifierBackend.is_supported():
             self._status_notifier = StatusNotifierBackend(
@@ -250,11 +273,11 @@ class ReminderApp(QObject):
                 parent=self,
             )
             self._status_notifier.start()
-            self._status_notifier.set_icon_state("green", "#4CAF50", "#388E3C")
+            self._status_notifier.set_icon_state(desired, fill, border)
             self._status_notifier.set_status("Active")
             return
 
-        self.tray_icon = QSystemTrayIcon(self._make_tray_icon("#4CAF50", "#388E3C"))
+        self.tray_icon = QSystemTrayIcon(self._make_tray_icon(fill, border))
         self.tray_icon.setToolTip("Reminder System")
         self.tray_icon.activated.connect(self._on_tray_activated)
         self.tray_icon.setContextMenu(menu)
@@ -278,6 +301,24 @@ class ReminderApp(QObject):
         painter.drawText(pixmap.rect(), 0x0084, "⏰")  # AlignCenter
         painter.end()
         return QIcon(pixmap)
+
+    @staticmethod
+    def _get_tray_icon_colours(state: str) -> tuple[str, str]:
+        """Return tray fill/border colours for a logical icon state."""
+        colours = {
+            "green": ("#4CAF50", "#388E3C"),
+            "grey": ("#9E9E9E", "#757575"),
+            "yellow": ("#FFC107", "#FFA000"),
+        }
+        return colours[state]
+
+    def _get_tray_icon_state(self) -> str:
+        """Return the current logical tray state from scanned locks."""
+        if self._cancel_lock_names:
+            return "grey"
+        if self._snooze_lock_names:
+            return "yellow"
+        return "green"
     
     def _update_tray_icon_color(self):
         """Set the tray icon colour based on the current lock state.
@@ -288,28 +329,15 @@ class ReminderApp(QObject):
         """
         if self.tray_icon is None and self._status_notifier is None:
             return
-        
-        cancel_active = bool(self._cancel_lock_names)
-        snooze_active = bool(self._snooze_lock_names)
-        
-        if cancel_active:
-            desired = "grey"
-        elif snooze_active:
-            desired = "yellow"
-        else:
-            desired = "green"
+
+        desired = self._get_tray_icon_state()
         
         if desired == self._last_tray_color:
             return  # No change needed
         
         self._last_tray_color = desired
-        
-        colours = {
-            "green":  ("#4CAF50", "#388E3C"),
-            "grey":   ("#9E9E9E", "#757575"),
-            "yellow": ("#FFC107", "#FFA000"),
-        }
-        fill, border = colours[desired]
+
+        fill, border = self._get_tray_icon_colours(desired)
         if self._status_notifier is not None:
             self._status_notifier.set_icon_state(desired, fill, border)
             self._status_notifier.set_status("Active")

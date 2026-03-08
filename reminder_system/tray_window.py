@@ -451,6 +451,10 @@ class TrayWindow(QWidget):
         elif page == self.PAGE_QUEUE:
             self._refresh_queue()
 
+    def refresh_contents(self):
+        """Refresh the currently selected page immediately."""
+        self._refresh_current_page()
+
     def _refresh_controls(self):
         # Snooze toggle visual state
         lock_dir = Path(self._app.config_manager.general.lock_dir)

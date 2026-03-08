@@ -38,7 +38,7 @@ from PyQt6.QtCore import QTimer
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from reminder_system.app import ReminderApp
-from reminder_system.config import ReminderConfig, GeneralConfig
+from reminder_system.config import ReminderConfig, GeneralConfig, load_config_file
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -109,9 +109,31 @@ def main():
     heartbeat.timeout.connect(lambda: None)
     heartbeat.start(500)
 
+    general_overrides: dict[str, object] = {}
+    if args.lock_dir is not None:
+        general_overrides["lock_dir"] = args.lock_dir
+    if args.work_session:
+        general_overrides["work_session_enable"] = True
+        general_overrides["work_session_start"] = args.ws_start
+        general_overrides["work_session_end"] = args.ws_end
+
+    config_data = load_config_file(FIXTURES_DIR / "config.toml")
+    effective_general = dict(config_data.get("general", {}))
+    effective_general.update(general_overrides)
+
+    effective_lock_dir = Path(effective_general.get("lock_dir", "/tmp"))
+    effective_lock_dir.mkdir(parents=True, exist_ok=True)
+    if args.start_snooze_lock:
+        (effective_lock_dir / "reminder-system_snooze.lock").touch()
+    if args.start_cancel_lock:
+        (effective_lock_dir / "reminder-system_cancel.lock").touch()
+
     # ── Create ReminderApp with fixture config ───────────────────
     reminder_app = ReminderApp(config_dir=FIXTURES_DIR, enable_tray=True)
-    if not reminder_app.initialize(skip_scheduler=True):
+    if not reminder_app.initialize(
+        skip_scheduler=True,
+        general_overrides=general_overrides or None,
+    ):
         print("Failed to initialize app")
         sys.exit(1)
 
@@ -129,24 +151,7 @@ def main():
             callback=reminder_app._trigger_reminder_threadsafe,
         )
 
-    # Apply CLI overrides
     general: GeneralConfig = reminder_app.config_manager.general
-    if args.lock_dir is not None:
-        general.lock_dir = args.lock_dir
-    if args.work_session:
-        general.work_session_enable = True
-        general.work_session_start = args.ws_start
-        general.work_session_end = args.ws_end
-
-    lock_dir = Path(general.lock_dir)
-    lock_dir.mkdir(parents=True, exist_ok=True)
-    if args.start_snooze_lock:
-        (lock_dir / "reminder-system_snooze.lock").touch()
-    if args.start_cancel_lock:
-        (lock_dir / "reminder-system_cancel.lock").touch()
-
-    reminder_app._scan_lock_files()
-    reminder_app._update_tray_icon_color()
 
     # Pre-queue some reminders
     names = list(fake.keys())
