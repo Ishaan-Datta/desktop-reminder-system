@@ -345,13 +345,6 @@ class TrayWindow(QWidget):
         self._snooze_btn.clicked.connect(self._toggle_snooze)
         layout.addWidget(self._snooze_btn)
 
-        # Clear queue button
-        self._clear_btn = ControlButton("🗑", "Clear Queue")
-        self._clear_btn.setObjectName("dangerBtn")
-        self._clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._clear_btn.clicked.connect(self._clear_queue)
-        layout.addWidget(self._clear_btn)
-
         # ── Work session controls ────────────────────────────────
         ws_section = QLabel("Work Session")
         ws_section.setObjectName("section")
@@ -472,10 +465,6 @@ class TrayWindow(QWidget):
 
         # Queue count
         qsize = self._app._queue.size() if self._app._queue else 0
-        self._clear_btn.set_content(
-            "🗑",
-            f"Clear Queue  ({qsize} item{'s' if qsize != 1 else ''})"
-        )
 
         # Lock status (cancel first, then snooze)
         cancel_names = getattr(self._app, "_cancel_lock_names", [])

@@ -149,6 +149,8 @@ class ReminderApp(QObject):
             # the first painted icon/panel contents already match reality.
             self._check_work_session()
             cancel_active, snooze_active = self._scan_lock_files()
+            if cancel_active:
+                self._clear_queue_for_cancel_lock("startup")
             self._lock_was_active = cancel_active or snooze_active
             
             # Set up periodic timer to check lock files and process queue
@@ -319,6 +321,15 @@ class ReminderApp(QObject):
         if self._snooze_lock_names:
             return "yellow"
         return "green"
+
+    def _clear_queue_for_cancel_lock(self, reason: str) -> None:
+        """Clear queued reminders because cancel locks suppress them."""
+        if self._queue is None or self._queue.is_empty():
+            return
+
+        count = self._queue.size()
+        self._queue.clear()
+        print(f"Cancel lock active ({reason}) – cleared {count} queued reminder(s)")
     
     def _update_tray_icon_color(self):
         """Set the tray icon colour based on the current lock state.
@@ -462,6 +473,7 @@ class ReminderApp(QObject):
                 lock_dir.mkdir(parents=True, exist_ok=True)
                 lock_file.touch()
                 print("Work session: outside schedule – created cancel lock")
+                self._clear_queue_for_cancel_lock("work session")
     
     def _is_cancel_locked(self) -> bool:
         """Convenience: True when any \*_cancel.lock file exists."""
@@ -576,6 +588,9 @@ class ReminderApp(QObject):
         
         cancel_active, snooze_active = self._scan_lock_files()
         any_lock = cancel_active or snooze_active
+
+        if cancel_active:
+            self._clear_queue_for_cancel_lock("lock scan")
         
         # Update tray icon colour to reflect current lock state
         self._update_tray_icon_color()
