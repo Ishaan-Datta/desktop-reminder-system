@@ -5,15 +5,23 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
 
-    pyproject-nix.url = "github:pyproject-nix/pyproject.nix";
-    uv2nix.url = "github:pyproject-nix/uv2nix";
-    pyproject-build-systems.url = "github:pyproject-nix/build-system-pkgs";
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
-    pyproject-nix.inputs.nixpkgs.follows = "nixpkgs";
-    uv2nix.inputs.nixpkgs.follows = "nixpkgs";
-    pyproject-build-systems.inputs.nixpkgs.follows = "nixpkgs";
-    uv2nix.inputs.pyproject-nix.follows = "pyproject-nix";
-    pyproject-build-systems.inputs.pyproject-nix.follows = "pyproject-nix";
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.uv2nix.follows = "uv2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -88,6 +96,7 @@
             export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/${pkgs.qt6.qtbase.qtPluginPrefix}"
             export UV_PYTHON="${python}/bin/python"
             export UV_PYTHON_DOWNLOADS=never
+            unset PYTHONPATH
             uv sync
 
             echo "Run 'uv run python run.py' to start the app"

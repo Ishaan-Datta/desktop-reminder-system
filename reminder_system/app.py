@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QAction
-from PyQt6.QtCore import QObject, pyqtSignal, QThread, QTimer, QFileSystemWatcher
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QFileSystemWatcher
 
 from .config import ConfigManager, ReminderConfig
 from .scheduler import ReminderScheduler

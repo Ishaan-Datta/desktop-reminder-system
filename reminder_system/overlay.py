@@ -2,15 +2,15 @@
 
 import sys
 from pathlib import Path
-from typing import Optional, Callable, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import (
     Qt, QTimer, QPropertyAnimation, QEasingCurve, 
-    QSize, pyqtSignal, QRect, QPoint
+    pyqtSignal
 )
 from PyQt6.QtGui import (
     QPixmap, QColor, QPainter, QBrush, QPen,
-    QScreen, QGuiApplication, QPainterPath, QRegion, QFont
+    QGuiApplication
 )
 from PyQt6.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, 

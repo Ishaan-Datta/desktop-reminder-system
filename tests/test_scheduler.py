@@ -1,9 +1,8 @@
 """Unit tests for the scheduler module."""
 
 import pytest
-import time
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from reminder_system.scheduler import ReminderScheduler, ScheduledReminder
 

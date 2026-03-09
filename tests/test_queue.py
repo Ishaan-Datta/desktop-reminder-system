@@ -2,8 +2,6 @@
 
 import json
 import pytest
-import tempfile
-from pathlib import Path
 
 from reminder_system.queue import PersistentReminderQueue
 

@@ -38,7 +38,7 @@ from PyQt6.QtCore import QTimer
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from reminder_system.app import ReminderApp
-from reminder_system.config import ReminderConfig, GeneralConfig, ConfigManager
+from reminder_system.config import ReminderConfig, GeneralConfig
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -56,7 +56,7 @@ def build_fake_reminders(count: int, config_dir: Path) -> dict[str, ReminderConf
         reminders[name] = ReminderConfig(
             name=name,
             schedule=["* * * * *"],          # not used – we fire manually
-            icon=f"test_icon.png",
+            icon="test_icon.png",
             snooze_duration=10,
             icon_path=config_dir / "test_icon.png",
             text=f"{emoji}  Overlapping reminder #{i + 1} of {count}",

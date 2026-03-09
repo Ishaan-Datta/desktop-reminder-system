@@ -7,7 +7,7 @@ on disk so that it survives service restarts and crashes.
 import json
 import threading
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 # Keys and their default values

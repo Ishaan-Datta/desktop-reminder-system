@@ -1,10 +1,7 @@
 """Unit tests for the PersistentState store."""
 
-import json
-import tempfile
 from pathlib import Path
 
-import pytest
 
 from reminder_system.state import PersistentState
 

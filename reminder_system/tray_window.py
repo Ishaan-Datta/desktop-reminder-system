@@ -562,9 +562,6 @@ class TrayWindow(QWidget):
         self._snooze_btn.style().unpolish(self._snooze_btn)
         self._snooze_btn.style().polish(self._snooze_btn)
 
-        # Queue count
-        qsize = self._app._queue.size() if self._app._queue else 0
-
         # Lock status (cancel first, then snooze)
         cancel_names = getattr(self._app, "_cancel_lock_names", [])
         snooze_names = getattr(self._app, "_snooze_lock_names", [])
