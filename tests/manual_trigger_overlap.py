@@ -47,7 +47,16 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 def build_fake_reminders(count: int, config_dir: Path) -> dict[str, ReminderConfig]:
     """Generate *count* unique ReminderConfigs with distinct names."""
     colours = [
-        "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚪", "🟤", "⬛", "🩷",
+        "🔴",
+        "🟠",
+        "🟡",
+        "🟢",
+        "🔵",
+        "🟣",
+        "⚪",
+        "🟤",
+        "⬛",
+        "🩷",
     ]
     reminders: dict[str, ReminderConfig] = {}
     for i in range(count):
@@ -55,7 +64,7 @@ def build_fake_reminders(count: int, config_dir: Path) -> dict[str, ReminderConf
         emoji = colours[i % len(colours)]
         reminders[name] = ReminderConfig(
             name=name,
-            schedule=["* * * * *"],          # not used – we fire manually
+            schedule=["* * * * *"],  # not used – we fire manually
             icon="test_icon.png",
             snooze_duration=10,
             icon_path=config_dir / "test_icon.png",
@@ -69,23 +78,37 @@ def main():
         description="Test overlapping / queued reminder behaviour",
     )
     parser.add_argument(
-        "--count", "-c", type=int, default=3,
+        "--count",
+        "-c",
+        type=int,
+        default=3,
         help="Number of reminders to fire (default: 3)",
     )
     parser.add_argument(
-        "--delay", "-d", type=int, default=500,
+        "--delay",
+        "-d",
+        type=int,
+        default=500,
         help="Milliseconds between each trigger (default: 500)",
     )
     parser.add_argument(
-        "--stagger", "-s", type=int, default=None,
+        "--stagger",
+        "-s",
+        type=int,
+        default=None,
         help="Override stagger_interval (seconds between queued reminders)",
     )
     parser.add_argument(
-        "--resume", "-r", type=int, default=None,
+        "--resume",
+        "-r",
+        type=int,
+        default=None,
         help="Override resume_interval (seconds before first queued reminder)",
     )
     parser.add_argument(
-        "--lock-dir", type=str, default=None,
+        "--lock-dir",
+        type=str,
+        default=None,
         help="Override lock_dir (directory scanned for *_snooze.lock / *_cancel.lock)",
     )
     args = parser.parse_args()
@@ -151,8 +174,10 @@ def main():
     def _on_done(*_args):
         dismissed["count"] += 1
         remaining = dismissed["total"] - dismissed["count"]
-        print(f"  [{dismissed['count']}/{dismissed['total']}] reminders handled"
-              + (f", {remaining} remaining" if remaining else ""))
+        print(
+            f"  [{dismissed['count']}/{dismissed['total']}] reminders handled"
+            + (f", {remaining} remaining" if remaining else "")
+        )
         if dismissed["count"] >= dismissed["total"]:
             print("\n✅ All reminders handled, exiting in 1s...")
             QTimer.singleShot(1000, app.quit)
@@ -182,15 +207,20 @@ def _fire(reminder_app: ReminderApp, name: str, dismissed: dict):
     reminder_app._trigger_reminder_threadsafe(name)
     # If the reminder was immediately skipped by cancel lock, count it
     # (it won't go through the overlay signals)
-    if name not in (reminder_app.config_manager.reminders or {}) \
-       or reminder_app._is_cancel_locked():
+    if (
+        name not in (reminder_app.config_manager.reminders or {})
+        or reminder_app._is_cancel_locked()
+    ):
         dismissed["count"] += 1
         remaining = dismissed["total"] - dismissed["count"]
-        print(f"  [{dismissed['count']}/{dismissed['total']}] reminders handled (skipped)"
-              + (f", {remaining} remaining" if remaining else ""))
+        print(
+            f"  [{dismissed['count']}/{dismissed['total']}] reminders handled (skipped)"
+            + (f", {remaining} remaining" if remaining else "")
+        )
         if dismissed["count"] >= dismissed["total"]:
             print("\n✅ All reminders handled (all skipped), exiting in 1s...")
             from PyQt6.QtWidgets import QApplication
+
             QTimer.singleShot(1000, QApplication.instance().quit)
 
 

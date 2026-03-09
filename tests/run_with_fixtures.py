@@ -9,7 +9,7 @@ This allows running the complete application with:
 
 Usage:
     python -m tests.run_with_fixtures
-    
+
     # Or with uv:
     uv run python -m tests.run_with_fixtures
 """
@@ -37,31 +37,28 @@ def main():
     print("=" * 50)
     print(f"Using config from: {FIXTURES_DIR}")
     print("=" * 50)
-    
+
     # Create Qt application
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("Reminder System (Test)")
-    
+
     # Create reminder app with custom config directory
-    reminder_app = ReminderApp(
-        config_dir=FIXTURES_DIR,
-        enable_tray=True
-    )
-    
+    reminder_app = ReminderApp(config_dir=FIXTURES_DIR, enable_tray=True)
+
     if not reminder_app.initialize():
         print("\nFailed to initialize. Make sure tests/fixtures/config.toml exists.")
         sys.exit(1)
-    
+
     # Handle Ctrl+C
     signal.signal(signal.SIGINT, lambda *_: reminder_app._quit())
     timer = QTimer()
     timer.timeout.connect(lambda: None)
     timer.start(500)
-    
+
     # Start the application
     reminder_app.run()
-    
+
     sys.exit(app.exec())
 
 

@@ -12,36 +12,36 @@ from croniter import croniter
 @dataclass
 class ScheduledReminder:
     """A scheduled reminder with its next run time(s)."""
+
     name: str
     cron_expressions: List[str]  # One or more cron expressions
     callback: Callable[[str], None]
     next_runs: List[datetime]  # One next-run per cron expression
     snoozed_until: Optional[datetime] = None
-    
+
     @property
     def next_run(self) -> datetime:
         """Earliest next run across all schedules."""
         return min(self.next_runs)
-    
+
     def calculate_next_run(self) -> datetime:
         """Recalculate next run times for all cron expressions."""
         now = datetime.now()
         self.next_runs = [
-            croniter(expr, now).get_next(datetime)
-            for expr in self.cron_expressions
+            croniter(expr, now).get_next(datetime) for expr in self.cron_expressions
         ]
         return self.next_run
-    
+
     def snooze(self, seconds: int) -> datetime:
         """Snooze the reminder for the specified duration."""
         self.snoozed_until = datetime.now() + timedelta(seconds=seconds)
         return self.snoozed_until
-    
+
     def clear_snooze(self):
         """Clear the snooze and recalculate next run."""
         self.snoozed_until = None
         self.calculate_next_run()
-    
+
     def get_effective_next_run(self) -> datetime:
         """Get the effective next run time considering snooze.
 
@@ -58,12 +58,12 @@ class ScheduledReminder:
 class ReminderScheduler:
     """
     Scheduler that triggers reminders based on cron expressions.
-    
+
     Uses a background thread to check for due reminders.
     """
-    
+
     CHECK_INTERVAL = 1.0  # Check every second
-    
+
     def __init__(self):
         self.reminders: Dict[str, ScheduledReminder] = {}
         self._running = False
@@ -71,49 +71,53 @@ class ReminderScheduler:
         self._lock = threading.Lock()
         self._triggered_this_minute: set = set()
         self._last_minute: Optional[int] = None
-    
+
     def add_reminder(
-        self, 
-        name: str, 
-        cron_expression: str | List[str], 
-        callback: Callable[[str], None]
+        self,
+        name: str,
+        cron_expression: str | List[str],
+        callback: Callable[[str], None],
     ) -> None:
         """
         Add a reminder to the scheduler.
-        
+
         Args:
             name: Unique name for the reminder
             cron_expression: Cron expression or list of cron expressions
             callback: Function to call when reminder triggers
         """
         # Normalize to list
-        expressions = cron_expression if isinstance(cron_expression, list) else [cron_expression]
-        
+        expressions = (
+            cron_expression if isinstance(cron_expression, list) else [cron_expression]
+        )
+
         # Validate all cron expressions
         for expr in expressions:
             if not croniter.is_valid(expr):
                 raise ValueError(f"Invalid cron expression: {expr}")
-        
+
         now = datetime.now()
         next_runs = [croniter(expr, now).get_next(datetime) for expr in expressions]
-        
+
         with self._lock:
             self.reminders[name] = ScheduledReminder(
                 name=name,
                 cron_expressions=expressions,
                 callback=callback,
-                next_runs=next_runs
+                next_runs=next_runs,
             )
-        
+
         earliest = min(next_runs)
-        print(f"Scheduled reminder '{name}' ({len(expressions)} schedule(s)) - next run: {earliest}")
-    
+        print(
+            f"Scheduled reminder '{name}' ({len(expressions)} schedule(s)) - next run: {earliest}"
+        )
+
     def remove_reminder(self, name: str) -> None:
         """Remove a reminder from the scheduler."""
         with self._lock:
             if name in self.reminders:
                 del self.reminders[name]
-    
+
     def snooze_reminder(self, name: str, seconds: int) -> None:
         """Snooze a reminder for the specified duration."""
         with self._lock:
@@ -123,7 +127,7 @@ class ReminderScheduler:
                 # again when a short snooze expires before the minute rolls over.
                 self._triggered_this_minute.discard(name)
                 print(f"Snoozed '{name}' until {snoozed_until}")
-    
+
     def complete_reminder(self, name: str) -> None:
         """Mark a reminder as complete and schedule next occurrence."""
         with self._lock:
@@ -131,71 +135,70 @@ class ReminderScheduler:
                 self.reminders[name].clear_snooze()
                 next_run = self.reminders[name].next_run
                 print(f"Completed '{name}' - next run: {next_run}")
-    
+
     def start(self) -> None:
         """Start the scheduler background thread."""
         if self._running:
             return
-        
+
         self._running = True
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
         print("Scheduler started")
-    
+
     def stop(self) -> None:
         """Stop the scheduler."""
         self._running = False
         if self._thread:
             self._thread.join(timeout=2.0)
         print("Scheduler stopped")
-    
+
     def _run_loop(self) -> None:
         """Main scheduler loop."""
         while self._running:
             now = datetime.now()
             current_minute = now.minute
-            
+
             # Reset triggered set when minute changes
             if self._last_minute != current_minute:
                 self._triggered_this_minute.clear()
                 self._last_minute = current_minute
-            
+
             with self._lock:
                 for name, reminder in list(self.reminders.items()):
                     # Skip if already triggered this minute
                     if name in self._triggered_this_minute:
                         continue
-                    
+
                     effective_time = reminder.get_effective_next_run()
-                    
+
                     # Check if reminder is due
                     if now >= effective_time:
                         self._triggered_this_minute.add(name)
-                        
+
                         # Clear snooze if it was a snoozed trigger
                         if reminder.snoozed_until:
                             reminder.snoozed_until = None
-                        
+
                         # Calculate next regular run
                         reminder.calculate_next_run()
-                        
+
                         # Trigger callback in separate thread to not block scheduler
                         threading.Thread(
-                            target=reminder.callback,
-                            args=(name,),
-                            daemon=True
+                            target=reminder.callback, args=(name,), daemon=True
                         ).start()
-            
+
             time.sleep(self.CHECK_INTERVAL)
-    
+
     def get_snoozed_names(self) -> set:
         """Get names of currently snoozed reminders."""
         with self._lock:
             return {
-                name for name, reminder in self.reminders.items()
+                name
+                for name, reminder in self.reminders.items()
                 if reminder.snoozed_until and reminder.snoozed_until > datetime.now()
             }
-    
+
     def get_status(self) -> Dict[str, dict]:
         """Get the status of all scheduled reminders."""
         status = {}
@@ -204,7 +207,9 @@ class ReminderScheduler:
                 status[name] = {
                     "schedules": reminder.cron_expressions,
                     "next_run": reminder.next_run.isoformat(),
-                    "snoozed_until": reminder.snoozed_until.isoformat() if reminder.snoozed_until else None,
-                    "effective_next": reminder.get_effective_next_run().isoformat()
+                    "snoozed_until": reminder.snoozed_until.isoformat()
+                    if reminder.snoozed_until
+                    else None,
+                    "effective_next": reminder.get_effective_next_run().isoformat(),
                 }
         return status

@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 @dataclass
 class GeneralConfig:
     """General settings for the reminder system."""
+
     text_font: str = "Sans Serif"
     text_size: int = 24
     icon_scale: float = 1.0
@@ -20,8 +21,8 @@ class GeneralConfig:
     resume_interval: int = 3  # seconds to wait before showing first queued reminder
     work_session_enable: bool = True
     work_session_start: str = "09:00"  # HH:MM 24-hour
-    work_session_end: str = "17:00"    # HH:MM 24-hour
-    
+    work_session_end: str = "17:00"  # HH:MM 24-hour
+
     @classmethod
     def from_dict(cls, settings: dict) -> "GeneralConfig":
         """Create a GeneralConfig from a dictionary."""
@@ -44,6 +45,7 @@ class GeneralConfig:
 @dataclass
 class ReminderConfig:
     """Configuration for a single reminder."""
+
     name: str
     schedule: List[str]  # List of cron strings (supports multiple active schedules)
     icon: str  # Filename of the icon
@@ -57,11 +59,11 @@ class ReminderConfig:
         # Normalize schedule to always be a list
         if isinstance(self.schedule, str):
             self.schedule = [self.schedule]
-    
+
     @classmethod
     def from_dict(cls, name: str, settings: dict, config_dir: Path) -> "ReminderConfig":
         """Create a ReminderConfig from a dictionary.
-        
+
         The 'schedule' field may be a single cron string or a list of cron strings.
         Both formats are normalized to a list internally.
         """
@@ -69,53 +71,55 @@ class ReminderConfig:
             raise ValueError(f"Reminder '{name}' is missing 'schedule' field")
         if "icon" not in settings:
             raise ValueError(f"Reminder '{name}' is missing 'icon' field")
-        
+
         icon_filename = settings["icon"]
         icon_path = config_dir / icon_filename
-        
+
         raw_schedule = settings["schedule"]
         schedule = raw_schedule if isinstance(raw_schedule, list) else [raw_schedule]
-        
+
         return cls(
             name=name,
             schedule=schedule,
             icon=icon_filename,
             snooze_duration=settings.get("snooze_duration", 300),
             icon_path=icon_path,
-            text=settings.get("text", None)
+            text=settings.get("text", None),
         )
 
 
-def parse_config_data(config_data: dict, config_dir: Path) -> tuple[Dict[str, ReminderConfig], GeneralConfig]:
+def parse_config_data(
+    config_data: dict, config_dir: Path
+) -> tuple[Dict[str, ReminderConfig], GeneralConfig]:
     """
     Parse configuration data into ReminderConfig objects and GeneralConfig.
-    
+
     Args:
         config_data: Raw parsed TOML data
         config_dir: Directory where icons are located
-        
+
     Returns:
         Tuple of (dictionary mapping reminder names to ReminderConfig objects, GeneralConfig)
     """
     reminders = {}
     general_config = GeneralConfig()
-    
+
     for name, settings in config_data.items():
         if not isinstance(settings, dict):
             continue
-        
+
         # Handle [general] section separately
         if name == "general":
             general_config = GeneralConfig.from_dict(settings)
             continue
-        
+
         reminder = ReminderConfig.from_dict(name, settings, config_dir)
-        
+
         if not reminder.icon_path.exists():
             print(f"Warning: Icon file not found: {reminder.icon_path}")
-        
+
         reminders[name] = reminder
-    
+
     return reminders, general_config
 
 
@@ -126,43 +130,43 @@ def load_config_file(config_file: Path) -> dict:
             f"Configuration file not found: {config_file}\n"
             f"Please create a config file at {config_file}"
         )
-    
+
     with open(config_file, "rb") as f:
         return tomllib.load(f)
 
 
 class ConfigManager:
     """Manages loading and parsing of the reminder configuration."""
-    
+
     DEFAULT_CONFIG_DIR = Path.home() / ".config" / "reminder-system"
     CONFIG_FILE = "config.toml"
-    
+
     def __init__(self, config_dir: Optional[Path] = None):
         self.config_dir = Path(config_dir) if config_dir else self.DEFAULT_CONFIG_DIR
         self.config_file = self.config_dir / self.CONFIG_FILE
         self.reminders: Dict[str, ReminderConfig] = {}
         self.general: GeneralConfig = GeneralConfig()
-    
+
     def ensure_config_dir(self) -> None:
         """Create the config directory if it doesn't exist."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def load_config(self) -> Dict[str, ReminderConfig]:
         """Load and parse the configuration file."""
         config_data = load_config_file(self.config_file)
         self.reminders, self.general = parse_config_data(config_data, self.config_dir)
         return self.reminders
-    
+
     def load_from_data(self, config_data: dict) -> Dict[str, ReminderConfig]:
         """Load reminders from already-parsed config data."""
         self.reminders, self.general = parse_config_data(config_data, self.config_dir)
         return self.reminders
-    
+
     def create_example_config(self) -> None:
         """Create an example configuration file."""
         self.ensure_config_dir()
-        
-        example_config = '''# Reminder System Configuration
+
+        example_config = """# Reminder System Configuration
 # Place icon files in ~/.config/reminder-system/
 
 # General settings (optional - these are the defaults)
@@ -198,9 +202,9 @@ schedule = ["*/20 * * * *"]  # Every 20 minutes (20-20-20 rule)
 icon = "eye.png"
 snooze_duration = 120  # 2 minutes
 text = "Look at something 20 feet away for 20 seconds"
-'''
-        
+"""
+
         with open(self.config_file, "w") as f:
             f.write(example_config)
-        
+
         print(f"Created example config at: {self.config_file}")

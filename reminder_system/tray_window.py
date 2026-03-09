@@ -13,9 +13,17 @@ from typing import Optional, TYPE_CHECKING
 from PyQt6.QtCore import Qt, QTimer, QRect, QSize, QEvent
 from PyQt6.QtGui import QCursor, QGuiApplication, QIcon
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QStackedWidget, QScrollArea, QFrame,
-    QApplication, QSizePolicy, QStyle,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QStackedWidget,
+    QScrollArea,
+    QFrame,
+    QApplication,
+    QSizePolicy,
+    QStyle,
 )
 
 if TYPE_CHECKING:
@@ -364,10 +372,15 @@ class TrayWindow(QWidget):
         self._refresh_timer.setInterval(1000)
         self._refresh_timer.timeout.connect(self._refresh_current_page)
 
-    def _compute_target_position(self, tray_geometry: Optional[QRect] = None) -> Optional[tuple[int, int]]:
+    def _compute_target_position(
+        self, tray_geometry: Optional[QRect] = None
+    ) -> Optional[tuple[int, int]]:
         """Return the best available window position near the tray icon."""
         if tray_geometry and not tray_geometry.isNull() and tray_geometry.width() > 0:
-            screen = QGuiApplication.screenAt(tray_geometry.center()) or QApplication.primaryScreen()
+            screen = (
+                QGuiApplication.screenAt(tray_geometry.center())
+                or QApplication.primaryScreen()
+            )
             if screen is None:
                 return None
 
@@ -377,7 +390,9 @@ class TrayWindow(QWidget):
             anchor_bottom = tray_geometry.bottom()
         else:
             cursor_pos = QCursor.pos()
-            screen = QGuiApplication.screenAt(cursor_pos) or QApplication.primaryScreen()
+            screen = (
+                QGuiApplication.screenAt(cursor_pos) or QApplication.primaryScreen()
+            )
             if screen is None:
                 return None
 
@@ -582,7 +597,11 @@ class TrayWindow(QWidget):
         general = self._app.config_manager.general
         ws_enabled = general.work_session_enable
         state = self._app._state
-        ws_mode = state.get("work_session_operating_mode", "automatic") if state else "automatic"
+        ws_mode = (
+            state.get("work_session_operating_mode", "automatic")
+            if state
+            else "automatic"
+        )
         is_manual = ws_mode == "manual"
 
         # Mode toggle
@@ -633,9 +652,7 @@ class TrayWindow(QWidget):
             return
 
         # Sort by effective next run time
-        sorted_items = sorted(
-            status.items(), key=lambda kv: kv[1]["effective_next"]
-        )
+        sorted_items = sorted(status.items(), key=lambda kv: kv[1]["effective_next"])
 
         for i, (name, info) in enumerate(sorted_items):
             card = self._make_upcoming_card(name, info)
@@ -682,9 +699,7 @@ class TrayWindow(QWidget):
         card_layout.setSpacing(2)
 
         name_label = QLabel(name)
-        name_label.setStyleSheet(
-            "color: #e0e0e0; font-size: 13px; font-weight: bold;"
-        )
+        name_label.setStyleSheet("color: #e0e0e0; font-size: 13px; font-weight: bold;")
         card_layout.addWidget(name_label)
 
         # Relative time string
@@ -705,9 +720,7 @@ class TrayWindow(QWidget):
                 mins = (total_seconds % 3600) // 60
                 time_str = f"in {hours}h {mins}m"
 
-            time_label = QLabel(
-                f"Next: {effective.strftime('%H:%M')}  ({time_str})"
-            )
+            time_label = QLabel(f"Next: {effective.strftime('%H:%M')}  ({time_str})")
         except (ValueError, KeyError):
             time_label = QLabel(f"Next: {info.get('effective_next', '?')}")
 
@@ -732,7 +745,9 @@ class TrayWindow(QWidget):
     def _apply_activation_token(self, activation_token: str) -> Optional[str]:
         """Seed Qt Wayland with a fresh activation token for the next show."""
         token = activation_token.strip()
-        if not token or not QGuiApplication.platformName().lower().startswith("wayland"):
+        if not token or not QGuiApplication.platformName().lower().startswith(
+            "wayland"
+        ):
             return None
 
         previous = os.environ.get("XDG_ACTIVATION_TOKEN")

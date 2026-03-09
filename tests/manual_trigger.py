@@ -9,13 +9,13 @@ This script allows you to test the overlay window without needing to:
 Usage:
     # From project root (uses tests/fixtures/config.toml by default):
     python -m tests.manual_trigger
-    
+
     # Or with uv:
     uv run python -m tests.manual_trigger
-    
+
     # Use example_config instead:
     python -m tests.manual_trigger --example
-    
+
     # Trigger a specific reminder by name:
     python -m tests.manual_trigger --name water_break
 """
@@ -59,45 +59,47 @@ def main():
         description="Manually trigger a reminder overlay for testing"
     )
     parser.add_argument(
-        "--name", "-n",
+        "--name",
+        "-n",
         default=None,
-        help="Name of the reminder to trigger (uses first reminder if not specified)"
+        help="Name of the reminder to trigger (uses first reminder if not specified)",
     )
     parser.add_argument(
-        "--example", "-e",
+        "--example",
+        "-e",
         action="store_true",
-        help="Use example_config/config.toml instead of tests/fixtures/config.toml"
+        help="Use example_config/config.toml instead of tests/fixtures/config.toml",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Create Qt application
     app = QApplication(sys.argv)
     app.setApplicationName("Reminder Test")
-    
+
     # Handle Ctrl+C
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     timer = QTimer()
     timer.timeout.connect(lambda: None)
     timer.start(500)
-    
+
     # Load config from fixture or example_config
     config_dir = EXAMPLE_CONFIG_DIR if args.example else FIXTURES_DIR
     print(f"Loading config from: {config_dir / 'config.toml'}")
-    
+
     manager = ConfigManager(config_dir)
     try:
         reminders = manager.load_config()
     except FileNotFoundError as e:
         print(f"Error: {e}")
         sys.exit(1)
-    
+
     general_config = manager.general
-    
+
     if not reminders:
         print("No reminders found in config!")
         sys.exit(1)
-    
+
     # Select reminder by name or use first one
     if args.name:
         if args.name not in reminders:
@@ -107,11 +109,11 @@ def main():
         config = reminders[args.name]
     else:
         config = list(reminders.values())[0]
-    
+
     if not config.icon_path.exists():
         print(f"Note: Icon file not found at {config.icon_path}")
         print("The overlay will display a text fallback instead.")
-    
+
     print("=" * 50)
     print("MANUAL REMINDER TRIGGER TEST")
     print("=" * 50)
@@ -133,20 +135,23 @@ def main():
     print("Click ✓ to complete or ⏰ to snooze.")
     print("Press Ctrl+C to cancel.")
     print("=" * 50)
-    
+
     # Create and show overlay with general config
     overlay = ReminderOverlay(general_config=general_config)
     overlay.completed.connect(on_completed)
     overlay.snoozed.connect(on_snoozed)
-    
+
     # Trigger after a brief delay to let the window initialize
-    QTimer.singleShot(500, lambda: overlay.show_reminder(
-        name=config.name,
-        icon_path=config.icon_path,
-        snooze_duration=config.snooze_duration,
-        text=config.text
-    ))
-    
+    QTimer.singleShot(
+        500,
+        lambda: overlay.show_reminder(
+            name=config.name,
+            icon_path=config.icon_path,
+            snooze_duration=config.snooze_duration,
+            text=config.text,
+        ),
+    )
+
     sys.exit(app.exec())
 
 

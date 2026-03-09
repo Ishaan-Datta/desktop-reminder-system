@@ -47,10 +47,10 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 def build_fake_reminders(config_dir: Path) -> dict[str, ReminderConfig]:
     """Generate a small set of reminders for interactive testing."""
     entries = [
-        ("water_break",   "💧", "Time to drink some water!",       "0 * * * *",      15),
-        ("stretch_break", "🧘", "Stand up and stretch!",           "*/30 9-17 * * 1-5", 600),
-        ("eye_rest",      "👁", "Look away for 20 seconds",        "*/20 * * * *",   120),
-        ("posture_check", "🪑", "Check your posture!",             "*/15 * * * *",   180),
+        ("water_break", "💧", "Time to drink some water!", "0 * * * *", 15),
+        ("stretch_break", "🧘", "Stand up and stretch!", "*/30 9-17 * * 1-5", 600),
+        ("eye_rest", "👁", "Look away for 20 seconds", "*/20 * * * *", 120),
+        ("posture_check", "🪑", "Check your posture!", "*/15 * * * *", 180),
     ]
     reminders: dict[str, ReminderConfig] = {}
     for name, emoji, text, schedule, snooze in entries:
@@ -70,31 +70,43 @@ def main():
         description="Interactive test for the tray icon, context menu, and panel window",
     )
     parser.add_argument(
-        "--lock-dir", type=str, default=None,
+        "--lock-dir",
+        type=str,
+        default=None,
         help="Override lock_dir (default: value from fixtures config)",
     )
     parser.add_argument(
-        "--queued", "-q", type=int, default=2,
+        "--queued",
+        "-q",
+        type=int,
+        default=2,
         help="Number of fake reminders to pre-queue (default: 2)",
     )
     parser.add_argument(
-        "--work-session", action="store_true",
+        "--work-session",
+        action="store_true",
         help="Enable the work session feature",
     )
     parser.add_argument(
-        "--ws-start", type=str, default="09:00",
+        "--ws-start",
+        type=str,
+        default="09:00",
         help="Work session start time HH:MM (default: 09:00)",
     )
     parser.add_argument(
-        "--ws-end", type=str, default="17:00",
+        "--ws-end",
+        type=str,
+        default="17:00",
         help="Work session end time HH:MM (default: 17:00)",
     )
     parser.add_argument(
-        "--start-snooze-lock", action="store_true",
+        "--start-snooze-lock",
+        action="store_true",
         help="Create reminder-system_snooze.lock before the app starts",
     )
     parser.add_argument(
-        "--start-cancel-lock", action="store_true",
+        "--start-cancel-lock",
+        action="store_true",
         help="Create reminder-system_cancel.lock before the app starts",
     )
     args = parser.parse_args()
@@ -170,9 +182,15 @@ def main():
     ws = "ON" if general.work_session_enable else "OFF"
     print(f"  Work session      : {ws}", end="")
     if general.work_session_enable:
-        ws_mode = reminder_app._state.get("work_session_operating_mode", "automatic") if reminder_app._state else "automatic"
-        print(f"  ({general.work_session_start} – {general.work_session_end},"
-              f" mode={ws_mode})")
+        ws_mode = (
+            reminder_app._state.get("work_session_operating_mode", "automatic")
+            if reminder_app._state
+            else "automatic"
+        )
+        print(
+            f"  ({general.work_session_start} – {general.work_session_end},"
+            f" mode={ws_mode})"
+        )
     else:
         print()
     print()

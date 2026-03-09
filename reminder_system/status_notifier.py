@@ -197,7 +197,9 @@ class StatusNotifierBackend(QObject):
             self,
         )
         self._service_watcher.serviceRegistered.connect(self._register_with_watcher)
-        self._service_watcher.serviceOwnerChanged.connect(self._on_watcher_owner_changed)
+        self._service_watcher.serviceOwnerChanged.connect(
+            self._on_watcher_owner_changed
+        )
         self._started = False
         self._icon_dir = Path(tempfile.mkdtemp(prefix="reminder-system-tray-"))
         self._theme_dir = self._icon_dir / "hicolor"
