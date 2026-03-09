@@ -3,201 +3,158 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
 
-    pyproject-nix = {
-      url = "github:pyproject-nix/pyproject.nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    pyproject-nix.url = "github:pyproject-nix/pyproject.nix";
+    uv2nix.url = "github:pyproject-nix/uv2nix";
+    pyproject-build-systems.url = "github:pyproject-nix/build-system-pkgs";
 
-    uv2nix = {
-      url = "github:pyproject-nix/uv2nix";
-      inputs.pyproject-nix.follows = "pyproject-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    pyproject-build-systems = {
-      url = "github:pyproject-nix/build-system-pkgs";
-      inputs.pyproject-nix.follows = "pyproject-nix";
-      inputs.uv2nix.follows = "uv2nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    pyproject-nix.inputs.nixpkgs.follows = "nixpkgs";
+    uv2nix.inputs.nixpkgs.follows = "nixpkgs";
+    pyproject-build-systems.inputs.nixpkgs.follows = "nixpkgs";
+    uv2nix.inputs.pyproject-nix.follows = "pyproject-nix";
+    pyproject-build-systems.inputs.pyproject-nix.follows = "pyproject-nix";
   };
 
   outputs =
     {
       self,
       nixpkgs,
+      flake-utils,
       uv2nix,
       pyproject-nix,
       pyproject-build-systems,
       ...
     }:
-    let
-      supportedSystems = [
-        "x86_64-linux"
-      ];
-      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        pkgs = import nixpkgs { inherit system; };
+        python = pkgs.python312;
 
-      # Load the uv workspace from the current directory
-      workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
-
-      # Create package overlay from workspace
-      overlay = workspace.mkPyprojectOverlay {
-        sourcePreference = "wheel";
-      };
-
-      # Python version to use
-      pythonVersion = "python312";
-
-      pkgsFor =
-        system:
-        import nixpkgs {
-          inherit system;
-          config.allowUnfree = true;
+        # 1. Load Project Workspace (parses pyproject.toml, uv.lock)
+        workspace = uv2nix.lib.workspace.loadWorkspace {
+          workspaceRoot = ./.; # Root of the flake/project
         };
 
-      # Build the Python environment for each system
-      mkPythonEnv =
-        system:
-        let
-          pkgs = pkgsFor system;
-          python = pkgs.${pythonVersion};
+        # 2. Generate Nix Overlay from uv.lock (via workspace)
+        uvLockedOverlay = workspace.mkPyprojectOverlay {
+          sourcePreference = "wheel"; # Or "sdist"
+        };
 
-          # Extend pyproject-nix with build systems
-          pyprojectOverrides = pyproject-build-systems.overlays.default;
-
-          # Create the Python package set
-          pythonSet =
-            (pkgs.callPackage pyproject-nix.build.packages {
-              inherit python;
-            }).overrideScope
-              (
-                nixpkgs.lib.composeManyExtensions [
-                  pyprojectOverrides
-                  overlay
-                  # Custom overrides for PyQt6 and other system deps
-                  (final: prev: {
-                    # PyQt6 needs special handling - use system package
-                    pyqt6 = prev.pyqt6.overrideAttrs (old: {
-                      # Use nixpkgs PyQt6 bindings
-                      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-                        pkgs.qt6.wrapQtAppsHook
-                      ];
-                      buildInputs = (old.buildInputs or [ ]) ++ [
-                        pkgs.qt6.qtbase
-                        pkgs.qt6.qtwayland
-                      ];
-                    });
-                  })
-                ]
-              );
-        in
-        pythonSet;
-
-    in
-    {
-      # Development shells
-      devShells = forAllSystems (
-        system:
-        let
-          pkgs = pkgsFor system;
-          python = pkgs.${pythonVersion};
-        in
-        {
-          default = pkgs.mkShell {
-            packages = [
-              python
-              pkgs.uv
-              pkgs.qt6.qtbase
-              pkgs.qt6.qtwayland
-              pkgs.libxkbcommon
-            ];
-
-            shellHook = ''
-              echo "Desktop Reminder System development shell"
-              echo "Run 'uv sync' to install dependencies"
-              echo "Run 'uv run python run.py' to start the app"
-              echo "Run 'uv run python -m tests.manual_trigger' to test overlay"
-
-              export QT_QPA_PLATFORM="xcb;wayland"
-              export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/${pkgs.qt6.qtbase.qtPluginPrefix}"
-            '';
-
-            LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath [
-              pkgs.stdenv.cc.cc.lib
-              pkgs.qt6.qtbase
-              pkgs.libxkbcommon
-              pkgs.xorg.libX11
-              pkgs.xorg.libXcursor
-              pkgs.xorg.libXrandr
-              pkgs.xorg.libXi
-              pkgs.libGL
-              pkgs.fontconfig
-              pkgs.freetype
-              pkgs.glib
-              pkgs.zlib
-              pkgs.zstd
-              pkgs.dbus
-            ];
+        # 3. Custom Package Overrides
+        hacks = pkgs.callPackage pyproject-nix.build.hacks { };
+        # Get the prebuilt packages from nixpkgs
+        pyprojectOverrides = final: prev: {
+          pyqt6 = hacks.nixpkgsPrebuilt {
+            from = python.pkgs.pyqt6;
           };
-        }
-      );
+        };
 
-      # Packages
-      packages = forAllSystems (
-        system:
-        let
-          pkgs = pkgsFor system;
-          python = pkgs.${pythonVersion};
-        in
-        {
-          default = self.packages.${system}.reminder-system;
+        # 4. Construct the Final Python Package Set
+        pythonSet = (pkgs.callPackage pyproject-nix.build.packages { inherit python; }).overrideScope (
+          nixpkgs.lib.composeManyExtensions [
+            pyproject-build-systems.overlays.default # For build tools
+            uvLockedOverlay # Locked dependencies
+            pyprojectOverrides # Fixes
+          ]
+        );
 
-          # Main application package using standard nixpkgs Python
-          reminder-system = pkgs.python3Packages.buildPythonApplication {
-            pname = "desktop-reminder-system";
-            version = "1.0.0";
-            format = "pyproject";
+        # Matches name in pyproject.toml
+        projectNameInToml = "desktop-reminder-system";
+        thisProjectAsNixPkg = pythonSet.${projectNameInToml};
 
-            src = ./.;
+        # Force pyqt6-sip into the virtual env
+        runtimeDeps = workspace.deps.default // {
+          pyqt6-sip = [ ];
+        };
 
-            nativeBuildInputs = [
-              pkgs.python3Packages.setuptools
-              pkgs.python3Packages.wheel
-              pkgs.qt6.wrapQtAppsHook
-            ];
+        # 5. Create the Python Runtime Environment
+        appPythonEnv = pythonSet.mkVirtualEnv (thisProjectAsNixPkg.pname + "-env") runtimeDeps; # Uses deps from pyproject.toml [project.dependencies]
+      in
+      {
+        # Development Shell
+        devShells.default = pkgs.mkShell {
+          packages = [
+            appPythonEnv
+            pkgs.ruff
+            pkgs.uv
+            pkgs.qt6.qtbase
+            pkgs.qt6.qtwayland
+            pkgs.libxkbcommon
+          ];
+          shellHook = ''
+            export QT_QPA_PLATFORM="xcb;wayland"
+            export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/${pkgs.qt6.qtbase.qtPluginPrefix}"
+            export UV_PYTHON="${python}/bin/python"
+            export UV_PYTHON_DOWNLOADS=never
+            uv sync
 
-            buildInputs = [
-              pkgs.qt6.qtbase
-              pkgs.qt6.qtwayland
-            ];
+            echo "Run 'uv run python run.py' to start the app"
+            echo "Run 'uv run python -m tests.manual_trigger' to test overlay"
+          '';
+          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath [
+            pkgs.stdenv.cc.cc.lib
+            pkgs.qt6.qtbase
+            pkgs.libxkbcommon
+            pkgs.xorg.libX11
+            pkgs.xorg.libXcursor
+            pkgs.xorg.libXrandr
+            pkgs.xorg.libXi
+            pkgs.libGL
+            pkgs.fontconfig
+            pkgs.freetype
+            pkgs.glib
+            pkgs.zlib
+            pkgs.zstd
+            pkgs.dbus
+          ];
+        };
 
-            propagatedBuildInputs = [
-              pkgs.python3Packages.pyqt6
-              pkgs.python3Packages.croniter
-            ]
-            ++ pkgs.lib.optionals (pkgs.python3.pythonOlder "3.11") [
-              pkgs.python3Packages.tomli
-            ];
+        # Nix Packaging the Application
+        packages.default = pkgs.stdenv.mkDerivation {
+          pname = thisProjectAsNixPkg.pname;
+          version = thisProjectAsNixPkg.version;
+          src = ./.;
 
-            # Don't run tests during build
-            doCheck = false;
+          nativeBuildInputs = [
+            pkgs.makeWrapper
+            pkgs.qt6.wrapQtAppsHook
+          ];
 
-            # Ensure Qt plugins are found
-            dontWrapQtApps = true;
+          # Runtime Python environment
+          buildInputs = [
+            appPythonEnv
+            pkgs.qt6.qtbase
+            pkgs.qt6.qtwayland
+            pkgs.kdePackages.kwindowsystem
+          ];
 
-            postFixup = ''
-              wrapQtApp $out/bin/reminder-system
-            '';
+          installPhase = ''
+            mkdir -p $out/bin
+            cp run.py $out/bin/${thisProjectAsNixPkg.pname}-script
+            chmod +x $out/bin/${thisProjectAsNixPkg.pname}-script
+            makeWrapper ${appPythonEnv}/bin/python $out/bin/${thisProjectAsNixPkg.pname} \
+              --add-flags $out/bin/${thisProjectAsNixPkg.pname}-script
+          '';
 
-            meta = with pkgs.lib; {
-              description = "Desktop reminder system with overlay notifications";
-              homepage = "https://github.com/yourusername/desktop-reminder-system";
-              license = licenses.mit;
-              platforms = platforms.linux;
-            };
+          # Don't run tests during build
+          doCheck = false;
+
+          meta = with pkgs.lib; {
+            description = "Desktop reminder system with overlay notifications";
+            homepage = "https://github.com/Ishaan-Datta/desktop-reminder-system";
+            license = licenses.mit;
+            platforms = platforms.linux;
           };
-        }
-      );
-    };
+        };
+        packages.${thisProjectAsNixPkg.pname} = self.packages.${system}.default;
+
+        apps.default = {
+          type = "app";
+          program = "${self.packages.${system}.default}/bin/${thisProjectAsNixPkg.pname}";
+        };
+        apps.${thisProjectAsNixPkg.pname} = self.apps.${system}.default;
+      }
+    );
 }
