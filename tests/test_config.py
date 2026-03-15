@@ -8,6 +8,9 @@ from reminder_system.config import (
     ReminderConfig,
     GeneralConfig,
     ConfigManager,
+    get_config_dir,
+    get_runtime_dir,
+    get_state_dir,
     parse_config_data,
     load_config_file,
 )
@@ -99,7 +102,7 @@ class TestGeneralConfig:
         assert config.max_opacity == 0.85
         assert config.fade_in_duration == 2000
         assert config.fade_out_duration == 500
-        assert config.lock_dir == "/tmp"
+        assert config.lock_dir == str(get_runtime_dir())
         assert config.stagger_interval == 5
         assert config.resume_interval == 3
         assert config.work_session_enable is True
@@ -148,7 +151,7 @@ class TestGeneralConfig:
         assert config.max_opacity == 0.85  # default
         assert config.fade_in_duration == 2000  # default
         assert config.fade_out_duration == 500  # default
-        assert config.lock_dir == "/tmp"  # default
+        assert config.lock_dir == str(get_runtime_dir())  # default
         assert config.stagger_interval == 5  # default
         assert config.resume_interval == 3  # default
         assert config.work_session_enable is True  # default
@@ -263,7 +266,8 @@ class TestConfigManager:
     def test_default_config_dir(self):
         """Test default config directory."""
         manager = ConfigManager()
-        assert manager.config_dir == Path.home() / ".config" / "reminder-system"
+        assert manager.config_dir == get_config_dir()
+        assert manager.state_dir == get_state_dir()
 
     def test_default_general_config(self):
         """Test that ConfigManager has default GeneralConfig."""

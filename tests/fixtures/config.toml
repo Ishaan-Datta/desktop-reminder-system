@@ -1,5 +1,5 @@
 # Test Configuration
-# This config is used for testing without modifying ~/.config/reminder-system/
+# This config is used for testing without modifying $XDG_CONFIG_HOME/desktop-reminder-system/
 
 # General settings (optional - these are the defaults)
 [general]

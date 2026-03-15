@@ -28,8 +28,10 @@ def qt_app():
 
 
 @pytest.fixture
-def config_dir(tmp_path: Path) -> Path:
+def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create a temporary config directory based on the test fixtures."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state-home"))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
     shutil.copy(FIXTURES_DIR / "config.toml", tmp_path / "config.toml")
     return tmp_path
 

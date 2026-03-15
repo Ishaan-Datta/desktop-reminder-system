@@ -15,7 +15,7 @@ Usage:
     uv run python -m tests.manual_tray
 
     # Override lock dir (e.g. a temp directory you control):
-    uv run python -m tests.manual_tray --lock-dir /tmp/my-locks
+    uv run python -m tests.manual_tray --lock-dir "$XDG_RUNTIME_DIR/my-locks"
 
     # Pre-populate the queue with N fake items:
     uv run python -m tests.manual_tray --queued 5
@@ -38,7 +38,12 @@ from PyQt6.QtCore import QTimer
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from reminder_system.app import ReminderApp
-from reminder_system.config import ReminderConfig, GeneralConfig, load_config_file
+from reminder_system.config import (
+    ReminderConfig,
+    GeneralConfig,
+    get_runtime_dir,
+    load_config_file,
+)
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -133,7 +138,7 @@ def main():
     effective_general = dict(config_data.get("general", {}))
     effective_general.update(general_overrides)
 
-    effective_lock_dir = Path(effective_general.get("lock_dir", "/tmp"))
+    effective_lock_dir = Path(effective_general.get("lock_dir", str(get_runtime_dir())))
     effective_lock_dir.mkdir(parents=True, exist_ok=True)
     if args.start_snooze_lock:
         (effective_lock_dir / "reminder-system_snooze.lock").touch()

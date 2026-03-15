@@ -17,13 +17,13 @@ Usage:
     uv run python -m tests.manual_trigger_overlap --stagger 3 --resume 2
 
     # Pre-create the snooze lock so reminders get queued, then remove it:
-    touch /tmp/reminder-system_snooze.lock
+    touch "$XDG_RUNTIME_DIR/desktop-reminder-system/reminder-system_snooze.lock"
     uv run python -m tests.manual_trigger_overlap
     # (reminders queue up; remove the lock to see them drain)
-    rm /tmp/reminder-system_snooze.lock
+    rm "$XDG_RUNTIME_DIR/desktop-reminder-system/reminder-system_snooze.lock"
 
     # Pre-create the cancel lock so all reminders are silently skipped:
-    touch /tmp/reminder-system_cancel.lock
+    touch "$XDG_RUNTIME_DIR/desktop-reminder-system/reminder-system_cancel.lock"
     uv run python -m tests.manual_trigger_overlap
 """
 

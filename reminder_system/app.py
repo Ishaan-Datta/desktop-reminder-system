@@ -165,11 +165,11 @@ class ReminderApp(QObject):
             self.overlay = self._create_overlay()
 
             # Initialize persistent queue (survives restarts)
-            queue_file = self.config_manager.config_dir / "queue.json"
+            queue_file = self.config_manager.state_dir / "queue.json"
             self._queue = PersistentReminderQueue(queue_file)
 
             # Initialize persistent state store (survives restarts)
-            state_file = self.config_manager.config_dir / "state.json"
+            state_file = self.config_manager.state_dir / "state.json"
             self._state = PersistentState(state_file)
 
             # Prime work-session and lock state before creating the tray UI so

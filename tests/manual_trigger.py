@@ -3,7 +3,7 @@
 Manual trigger script for testing the reminder overlay.
 
 This script allows you to test the overlay window without needing to:
-1. Copy config to ~/.config/reminder-system/
+1. Copy config to $XDG_CONFIG_HOME/desktop-reminder-system/
 2. Wait for cron schedules to trigger
 
 Usage:

@@ -3,7 +3,7 @@
 Run the full reminder app using test fixtures.
 
 This allows running the complete application with:
-- Config from tests/fixtures/ instead of ~/.config/reminder-system/
+- Config from tests/fixtures/ instead of $XDG_CONFIG_HOME/desktop-reminder-system/
 - Test icons from the project directory
 - Full scheduler functionality
 

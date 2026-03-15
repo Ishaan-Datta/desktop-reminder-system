@@ -26,7 +26,8 @@ uv run python run.py
 
 ## Configuration
 
-The application reads [config.toml](example_config/config.toml) from `~/.config/reminder-system/config.toml`.
+The application reads [config.toml](example_config/config.toml) from `$XDG_CONFIG_HOME/desktop-reminder-system/config.toml`.
+If `XDG_CONFIG_HOME` is unset, it falls back to `~/.config/desktop-reminder-system/config.toml`.
 
 ### Reminder format
 
@@ -56,6 +57,11 @@ The optional `[general]` section supports:
 - `work_session_end`
 
 See [example_config/config.toml](example_config/config.toml) for the current complete sample.
+
+By default, lock files are scanned in `$XDG_RUNTIME_DIR/desktop-reminder-system`.
+If `XDG_RUNTIME_DIR` is unset, the fallback is `/tmp/desktop-reminder-system`.
+Persistent `queue.json` and `state.json` are stored in `$XDG_STATE_HOME/desktop-reminder-system`
+(fallback `~/.local/state/desktop-reminder-system`).
 
 ## Usage
 

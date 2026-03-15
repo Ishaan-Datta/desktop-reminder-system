@@ -1,9 +1,36 @@
 """Configuration parser for the reminder system."""
 
+import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
+
+
+APP_DIR_NAME = "desktop-reminder-system"
+
+
+def _xdg_dir(env_name: str, fallback: Path) -> Path:
+    """Return an XDG directory from *env_name* or use *fallback* if unset."""
+    value = os.environ.get(env_name)
+    if value:
+        return Path(value).expanduser()
+    return fallback
+
+
+def get_runtime_dir() -> Path:
+    """Return the XDG runtime directory (with a safe /tmp fallback)."""
+    return _xdg_dir("XDG_RUNTIME_DIR", Path("/tmp")) / APP_DIR_NAME
+
+
+def get_config_dir() -> Path:
+    """Return the app config directory under XDG_CONFIG_HOME."""
+    return _xdg_dir("XDG_CONFIG_HOME", Path.home() / ".config") / APP_DIR_NAME
+
+
+def get_state_dir() -> Path:
+    """Return the app state directory under XDG_STATE_HOME."""
+    return _xdg_dir("XDG_STATE_HOME", Path.home() / ".local" / "state") / APP_DIR_NAME
 
 
 @dataclass
@@ -16,7 +43,9 @@ class GeneralConfig:
     max_opacity: float = 0.85
     fade_in_duration: int = 2000  # milliseconds
     fade_out_duration: int = 500  # milliseconds
-    lock_dir: str = "/tmp"  # Directory scanned for *_snooze.lock / *_cancel.lock
+    lock_dir: str = field(
+        default_factory=lambda: str(get_runtime_dir())
+    )  # Directory scanned for *_snooze.lock / *_cancel.lock
     stagger_interval: int = 5  # seconds between displaying queued reminders
     resume_interval: int = 3  # seconds to wait before showing first queued reminder
     work_session_enable: bool = True
@@ -33,7 +62,7 @@ class GeneralConfig:
             max_opacity=settings.get("max_opacity", 0.85),
             fade_in_duration=settings.get("fade_in_duration", 2000),
             fade_out_duration=settings.get("fade_out_duration", 500),
-            lock_dir=settings.get("lock_dir", "/tmp"),
+            lock_dir=settings.get("lock_dir", str(get_runtime_dir())),
             stagger_interval=settings.get("stagger_interval", 5),
             resume_interval=settings.get("resume_interval", 3),
             work_session_enable=settings.get("work_session_enable", True),
@@ -139,12 +168,12 @@ def load_config_file(config_file: Path) -> dict:
 class ConfigManager:
     """Manages loading and parsing of the reminder configuration."""
 
-    DEFAULT_CONFIG_DIR = Path.home() / ".config" / "reminder-system"
     CONFIG_FILE = "config.toml"
 
     def __init__(self, config_dir: Optional[Path] = None):
         """Initialise the manager with an optional config directory override."""
-        self.config_dir = Path(config_dir) if config_dir else self.DEFAULT_CONFIG_DIR
+        self.config_dir = Path(config_dir) if config_dir else get_config_dir()
+        self.state_dir = get_state_dir()
         self.config_file = self.config_dir / self.CONFIG_FILE
         self.reminders: Dict[str, ReminderConfig] = {}
         self.general: GeneralConfig = GeneralConfig()
@@ -169,7 +198,7 @@ class ConfigManager:
         self.ensure_config_dir()
 
         example_config = """# Reminder System Configuration
-# Place icon files in ~/.config/reminder-system/
+    # Place icon files in the same directory as this config file.
 
 # General settings (optional - these are the defaults)
 [general]
@@ -179,7 +208,7 @@ icon_scale = 1.0          # Scale factor for icons (1.0 = 200px)
 max_opacity = 0.85        # Maximum opacity of dark overlay (0.0-1.0)
 fade_in_duration = 2000   # Fade-in animation duration in milliseconds
 fade_out_duration = 500   # Fade-out animation duration in milliseconds
-lock_dir = "/tmp"          # Directory scanned for *_snooze.lock and *_cancel.lock files
+    # lock_dir = "/custom/locks" # Optional override (default: $XDG_RUNTIME_DIR/desktop-reminder-system)
 stagger_interval = 5      # Seconds to wait between showing queued reminders
 resume_interval = 3       # Seconds to wait before showing first queued reminder
 work_session_enable = true        # Enable/disable work session feature
