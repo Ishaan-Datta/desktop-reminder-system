@@ -87,6 +87,7 @@
             appPythonEnv
             pkgs.ruff
             pkgs.uv
+            pkgs.lefthook
             pkgs.qt6.qtbase
             pkgs.qt6.qtwayland
             pkgs.libxkbcommon
@@ -97,6 +98,8 @@
             export UV_PYTHON="${python}/bin/python"
             export UV_PYTHON_DOWNLOADS=never
             unset PYTHONPATH
+
+            lefthook install
             uv sync
 
             echo "Run 'uv run python run.py' to start the app"
@@ -144,6 +147,7 @@
             cp run.py $out/bin/${thisProjectAsNixPkg.pname}-script
             chmod +x $out/bin/${thisProjectAsNixPkg.pname}-script
             makeWrapper ${appPythonEnv}/bin/python $out/bin/${thisProjectAsNixPkg.pname} \
+              --set QT_QPA_PLATFORM xcb \
               --add-flags $out/bin/${thisProjectAsNixPkg.pname}-script
           '';
 

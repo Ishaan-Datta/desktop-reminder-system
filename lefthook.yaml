@@ -1,0 +1,19 @@
+assert_lefthook_installed: true
+colors: false
+output: false
+pre-commit:
+  jobs:
+    - name: format
+      run: uv run ruff format --quiet
+      stage_fixed: true
+    - name: lint
+      run: uv run ruff check --fix --quiet
+      stage_fixed: true
+pre-push:
+  jobs:
+    - name: check format
+      run: uv run ruff format --check
+      fail_text: "Format check failed, run `uv run ruff format`"
+    - name: check lint
+      run: uv run ruff check
+      fail_text: "Lint check failed, run `uv run ruff check --fix`"
