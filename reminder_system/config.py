@@ -54,6 +54,7 @@ class ReminderConfig:
     text: Optional[str] = None  # Optional text to display under the icon
 
     def __post_init__(self):
+        """Normalise path and schedule fields after dataclass construction."""
         if isinstance(self.icon_path, str):
             self.icon_path = Path(self.icon_path)
         # Normalize schedule to always be a list
@@ -142,6 +143,7 @@ class ConfigManager:
     CONFIG_FILE = "config.toml"
 
     def __init__(self, config_dir: Optional[Path] = None):
+        """Initialise the manager with an optional config directory override."""
         self.config_dir = Path(config_dir) if config_dir else self.DEFAULT_CONFIG_DIR
         self.config_file = self.config_dir / self.CONFIG_FILE
         self.reminders: Dict[str, ReminderConfig] = {}
@@ -180,7 +182,7 @@ fade_out_duration = 500   # Fade-out animation duration in milliseconds
 lock_dir = "/tmp"          # Directory scanned for *_snooze.lock and *_cancel.lock files
 stagger_interval = 5      # Seconds to wait between showing queued reminders
 resume_interval = 3       # Seconds to wait before showing first queued reminder
-work_session_enable = false       # Enable/disable work session feature
+work_session_enable = true        # Enable/disable work session feature
 work_session_start = "09:00"      # Work session start time (HH:MM, 24-hour)
 work_session_end = "17:00"        # Work session end time (HH:MM, 24-hour)
 

@@ -96,6 +96,28 @@ class ReminderApp(QObject):
         # Track last tray icon color to avoid unnecessary repaints
         self._last_tray_color: Optional[str] = None
 
+    def _create_overlay(self) -> ReminderOverlay:
+        """Create and connect the overlay using the current general settings."""
+        overlay = ReminderOverlay(general_config=self.config_manager.general)
+        overlay.completed.connect(self._on_reminder_completed)
+        overlay.snoozed.connect(self._on_reminder_snoozed)
+        return overlay
+
+    def _apply_runtime_general_config(self) -> None:
+        """Apply the current general config to already-created runtime objects."""
+        if self.overlay is not None:
+            self.overlay.apply_general_config(self.config_manager.general)
+
+        self._check_work_session()
+        cancel_active, snooze_active = self._scan_lock_files()
+        if cancel_active:
+            self._clear_queue_for_cancel_lock("config reload")
+        self._lock_was_active = cancel_active or snooze_active
+        self._update_tray_icon_color()
+
+        if self._tray_window is not None:
+            self._tray_window.refresh_contents()
+
     def _apply_general_overrides(
         self, general_overrides: Optional[dict[str, Any]]
     ) -> None:
@@ -139,10 +161,8 @@ class ReminderApp(QObject):
                 schedules = ", ".join(config.schedule)
                 print(f"  - {name}: [{schedules}]")
 
-            # Create overlay with general config settings
-            self.overlay = ReminderOverlay(general_config=self.config_manager.general)
-            self.overlay.completed.connect(self._on_reminder_completed)
-            self.overlay.snoozed.connect(self._on_reminder_snoozed)
+            # Create overlay with the current general config settings.
+            self.overlay = self._create_overlay()
 
             # Initialize persistent queue (survives restarts)
             queue_file = self.config_manager.config_dir / "queue.json"
@@ -169,7 +189,7 @@ class ReminderApp(QObject):
             # Set up config file watcher for hot reload
             self._setup_config_watcher()
 
-            # Set up work session timer (checks once per minute)
+            # Set up work-session checks.
             self._work_session_timer = QTimer()
             self._work_session_timer.setInterval(15000)  # 15 seconds
             self._work_session_timer.timeout.connect(self._check_work_session)
@@ -202,7 +222,7 @@ class ReminderApp(QObject):
 
     def initialize_minimal(self, reminders: dict) -> bool:
         """
-        Initialize with pre-loaded reminder configs (for testing).
+        Initialize the minimal runtime needed for focused app tests.
 
         Args:
             reminders: Dictionary of name -> ReminderConfig
@@ -212,10 +232,7 @@ class ReminderApp(QObject):
         """
         self.config_manager.reminders = reminders
 
-        # Create overlay
-        self.overlay = ReminderOverlay()
-        self.overlay.completed.connect(self._on_reminder_completed)
-        self.overlay.snoozed.connect(self._on_reminder_snoozed)
+        self.overlay = self._create_overlay()
 
         # Initialize persistent queue for testing (uses temp directory)
         import tempfile
@@ -227,30 +244,74 @@ class ReminderApp(QObject):
 
     def trigger_reminder(self, name: str) -> bool:
         """
-        Manually trigger a reminder by name.
+        Manually route a configured reminder through the normal trigger flow.
 
         Args:
             name: The name of the reminder to trigger
 
         Returns:
-            True if the reminder was found and triggered
+            ``True`` if the reminder was found and accepted for display or queueing
         """
         if name not in self.config_manager.reminders:
             print(f"Unknown reminder: {name}")
             return False
 
-        config = self.config_manager.reminders[name]
-        self._show_reminder(config)
-        return True
+        return self._handle_trigger_request(
+            self.config_manager.reminders[name],
+            complete_scheduled=True,
+        )
 
-    def trigger_reminder_config(self, config: ReminderConfig):
+    def trigger_reminder_config(self, config: ReminderConfig) -> bool:
         """
-        Trigger a reminder with a given config directly.
+        Trigger a reminder config directly using the normal queue and lock rules.
 
         Args:
             config: The ReminderConfig to display
+
+        Returns:
+            ``True`` if the reminder was accepted for display or queueing
         """
+        self.config_manager.reminders[config.name] = config
+        return self._handle_trigger_request(config, complete_scheduled=False)
+
+    def _handle_trigger_request(
+        self,
+        config: ReminderConfig,
+        *,
+        complete_scheduled: bool,
+    ) -> bool:
+        """Route a reminder through lock checks, queueing rules, and display logic."""
+        if self.overlay is None or self._queue is None:
+            raise RuntimeError(
+                "ReminderApp must be initialized before reminders can be triggered"
+            )
+
+        name = config.name
+        cancel_active, snooze_active = self._scan_lock_files()
+
+        if cancel_active:
+            print(f"Cancel lock active, skipping reminder: {name}")
+            if complete_scheduled:
+                self.scheduler.complete_reminder(name)
+            return False
+
+        if snooze_active:
+            print(f"Snooze lock active, queueing reminder: {name}")
+            self._queue.push_back(name)
+            self._lock_was_active = True
+            return True
+
+        if (
+            self.active_reminder is not None
+            or self._stagger_pending
+            or self._resume_pending
+        ):
+            print(f"Overlay active or delay pending, queueing reminder: {name}")
+            self._queue.push_back(name)
+            return True
+
         self._show_reminder(config)
+        return True
 
     def _setup_tray(self):
         """Set up the system tray icon and panel window."""
@@ -364,18 +425,18 @@ class ReminderApp(QObject):
             self.tray_icon.setIcon(self._make_tray_icon(fill, border))
 
     def _on_tray_activated(self, reason):
-        """Toggle tray panel on left-click."""
+        """Toggle the tray panel when the tray icon receives a primary click."""
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self._toggle_tray_window_from_activation()
 
     def _toggle_tray_window_from_activation(self):
-        """Open or close the tray window after a tray activation."""
+        """Open or close the tray window using the X11 tray icon geometry."""
         if self._tray_window is None or self.tray_icon is None:
             return
         self._tray_window.toggle_visibility(self.tray_icon.geometry())
 
     def _on_status_notifier_activate(self, tray_geometry):
-        """Toggle the tray panel using the freshest Wayland activation token."""
+        """Open or close the tray window using Wayland activation metadata."""
         if self._tray_window is None:
             return
 
@@ -386,12 +447,11 @@ class ReminderApp(QObject):
         self._tray_window.toggle_visibility(tray_geometry, activation_token)
 
     def _trigger_reminder_threadsafe(self, name: str):
-        """Thread-safe method to trigger a reminder."""
-        # Emit signal to main thread
+        """Forward a scheduler callback to the Qt main thread."""
         self.trigger.triggered.emit(name)
 
     def _scan_lock_files(self) -> tuple[bool, bool]:
-        """Scan lock_dir for \*_cancel.lock and \*_snooze.lock files.
+        """Scan `lock_dir` for `*_cancel.lock` and `*_snooze.lock` files.
 
         Updates self._cancel_lock_names and self._snooze_lock_names with
         the prefixes scraped from each filename (the part before the
@@ -489,12 +549,12 @@ class ReminderApp(QObject):
                 self._clear_queue_for_cancel_lock("work session")
 
     def _is_cancel_locked(self) -> bool:
-        """Convenience: True when any \*_cancel.lock file exists."""
+        """Convenience helper returning whether any `*_cancel.lock` file exists."""
         cancel, _ = self._scan_lock_files()
         return cancel
 
     def _is_snooze_locked(self) -> bool:
-        """Convenience: True when any \*_snooze.lock file exists."""
+        """Convenience helper returning whether any `*_snooze.lock` file exists."""
         _, snooze = self._scan_lock_files()
         return snooze
 
@@ -506,31 +566,13 @@ class ReminderApp(QObject):
             print(f"Warning: Unknown reminder '{name}'")
             return
 
-        # Scan lock files once (cancel takes precedence over snooze)
-        cancel_active, snooze_active = self._scan_lock_files()
-
-        if cancel_active:
-            print(f"Cancel lock active, skipping reminder: {name}")
-            self.scheduler.complete_reminder(name)
-            return
-
-        if snooze_active:
-            print(f"Snooze lock active, queueing reminder: {name}")
-            self._queue.push_back(name)
-            self._lock_was_active = True
-            return
-
-        # If overlay is already showing or stagger delay is pending, queue
-        if self.active_reminder is not None or self._stagger_pending:
-            print(f"Overlay active or stagger pending, queueing reminder: {name}")
-            self._queue.push_back(name)
-            return
-
-        config = self.config_manager.reminders[name]
-        self._show_reminder(config)
+        self._handle_trigger_request(
+            self.config_manager.reminders[name],
+            complete_scheduled=True,
+        )
 
     def _show_reminder(self, config: ReminderConfig):
-        """Show the overlay for a reminder."""
+        """Display a reminder immediately in the overlay."""
         self.active_reminder = config
         self.overlay.show_reminder(
             name=config.name,
@@ -662,7 +704,7 @@ class ReminderApp(QObject):
     # ── Config hot reload ────────────────────────────────────────
 
     def _setup_config_watcher(self):
-        """Set up a file watcher on config.toml for hot reloading."""
+        """Watch the config file and debounce reloads after edits."""
         self._config_watcher = QFileSystemWatcher()
         config_path = str(self.config_manager.config_file)
         self._config_watcher.addPath(config_path)
@@ -677,13 +719,12 @@ class ReminderApp(QObject):
         print(f"Watching config file for changes: {config_path}")
 
     def _on_config_file_changed(self, path: str):
-        """Handle config file change notification (debounced)."""
+        """Record a config file change and schedule a debounced reload."""
         print(f"Config file change detected: {path}")
-        # Restart debounce timer (handles rapid successive writes)
         self._reload_timer.start()
 
     def _reload_config(self):
-        """Reload configuration and update scheduler for non-snoozed reminders."""
+        """Reload reminder and general configuration into the running application."""
         config_path = str(self.config_manager.config_file)
 
         try:
@@ -697,6 +738,16 @@ class ReminderApp(QObject):
         # Re-add the file to the watcher (some editors delete+recreate)
         if config_path not in self._config_watcher.files():
             self._config_watcher.addPath(config_path)
+
+        self._apply_runtime_general_config()
+
+        if (
+            self.active_reminder is not None
+            and self.active_reminder.name in new_reminders
+        ):
+            self.active_reminder = new_reminders[self.active_reminder.name]
+            if self.overlay is not None and self.overlay.isVisible():
+                self.overlay.update_active_reminder(self.active_reminder)
 
         # Determine which reminders are currently snoozed
         snoozed_names = self.scheduler.get_snoozed_names()
@@ -732,7 +783,7 @@ class ReminderApp(QObject):
     # ── Tray and status ──────────────────────────────────────────
 
     def _show_status(self):
-        """Show the status of all reminders."""
+        """Print a status report for reminders, locks, queue state, and work session mode."""
         status = self.scheduler.get_status()
         print("\n=== Reminder Status ===")
         for name, info in status.items():
@@ -766,7 +817,7 @@ class ReminderApp(QObject):
         print("=" * 24 + "\n")
 
     def _quit(self):
-        """Quit the application."""
+        """Stop timers, tear down UI resources, and exit the Qt application."""
         print("Shutting down...")
         if self._reload_timer:
             self._reload_timer.stop()
@@ -784,7 +835,7 @@ class ReminderApp(QObject):
         QApplication.quit()
 
     def run(self):
-        """Start the application."""
+        """Start the scheduler thread and print the startup banner."""
         self.scheduler.start()
         print(
             "\nReminder system is running. Use the system tray icon to access options."

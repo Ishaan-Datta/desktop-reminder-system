@@ -21,6 +21,7 @@ class PersistentReminderQueue:
     """
 
     def __init__(self, queue_file: Path):
+        """Initialise the queue and load any persisted reminder names."""
         self.queue_file = queue_file
         self._queue: List[str] = []
         self._lock = threading.Lock()

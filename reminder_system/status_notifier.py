@@ -69,6 +69,7 @@ class StatusNotifierItem(QObject):
         on_context_menu: Callable[[QPoint], None],
         parent: Optional[QObject] = None,
     ):
+        """Initialise the exported StatusNotifierItem object."""
         super().__init__(parent)
         self._app_id = app_id
         self._title = title
@@ -81,70 +82,87 @@ class StatusNotifierItem(QObject):
 
     @pyqtProperty(str)
     def Category(self) -> str:
+        """Return the StatusNotifier category for the item."""
         return "ApplicationStatus"
 
     @pyqtProperty(str)
     def Id(self) -> str:
+        """Return the stable identifier advertised on D-Bus."""
         return self._app_id
 
     @pyqtProperty(str)
     def Title(self) -> str:
+        """Return the human-readable tray item title."""
         return self._title
 
     @pyqtProperty(str)
     def Status(self) -> str:
+        """Return the current StatusNotifier status string."""
         return self._status
 
     @pyqtProperty(int)
     def WindowId(self) -> int:
+        """Return the associated window id when one exists."""
         return 0
 
     @pyqtProperty(str)
     def IconName(self) -> str:
+        """Return the active icon name inside the generated theme."""
         return self._icon_name
 
     @pyqtProperty(str)
     def IconThemePath(self) -> str:
+        """Return the filesystem path for the generated icon theme."""
         return self._icon_theme_path
 
     @pyqtProperty(bool)
     def ItemIsMenu(self) -> bool:
+        """Return whether the tray item behaves like a menu."""
         return False
 
     @pyqtProperty("QDBusObjectPath")
     def Menu(self) -> QDBusObjectPath:
+        """Return the exported menu object path."""
         return QDBusObjectPath(MENU_PATH)
 
     @pyqtProperty(str)
     def AttentionIconName(self) -> str:
+        """Return the optional attention icon name."""
         return ""
 
     @pyqtProperty(str)
     def OverlayIconName(self) -> str:
+        """Return the optional overlay icon name."""
         return ""
 
     @pyqtProperty(str)
     def AttentionMovieName(self) -> str:
+        """Return the optional attention animation name."""
         return ""
 
     @pyqtSlot(int, int)
     def Activate(self, x: int, y: int):
+        """Forward a primary activation request from the tray host."""
         self._on_activate(QRect(x, y, 1, 1))
 
     @pyqtSlot(int, int)
     def ContextMenu(self, x: int, y: int):
+        """Forward a context-menu request from the tray host."""
         self._on_context_menu(QPoint(x, y))
 
     @pyqtSlot(int, int)
     def SecondaryActivate(self, x: int, y: int):
+        """Treat secondary activation the same as primary activation."""
         self._on_activate(QRect(x, y, 1, 1))
 
     @pyqtSlot(int, str)
     def Scroll(self, delta: int, orientation: str):
+        """Accept scroll events even though the item does not use them."""
         _ = (delta, orientation)
 
     @pyqtSlot(str)
     def ProvideXdgActivationToken(self, token: str):
+        """Store the latest XDG activation token sent by the tray host."""
         self._last_activation_token = token
 
     def take_activation_token(self) -> str:
@@ -154,6 +172,7 @@ class StatusNotifierItem(QObject):
         return token
 
     def update_icon(self, icon_name: str, icon_theme_path: str):
+        """Publish an updated icon name and theme path to watchers."""
         if self._icon_name == icon_name and self._icon_theme_path == icon_theme_path:
             return
         self._icon_name = icon_name
@@ -161,6 +180,7 @@ class StatusNotifierItem(QObject):
         self.NewIcon.emit()
 
     def update_status(self, status: str):
+        """Publish an updated StatusNotifier status string."""
         if self._status == status:
             return
         self._status = status
@@ -178,6 +198,7 @@ class StatusNotifierBackend(QObject):
         on_context_menu: Callable[[QPoint], None],
         parent: Optional[QObject] = None,
     ):
+        """Initialise the Linux tray backend and its temporary icon theme."""
         super().__init__(parent)
         self._connection = QDBusConnection.sessionBus()
         self._icon_factory = icon_factory
@@ -274,10 +295,12 @@ class StatusNotifierBackend(QObject):
         return self._item.take_activation_token()
 
     def _on_watcher_owner_changed(self, _service: str, _old_owner: str, new_owner: str):
+        """Re-register the item when the watcher service owner changes."""
         if new_owner:
             self._register_with_watcher()
 
     def _register_with_watcher(self):
+        """Register the exported item with the StatusNotifier watcher."""
         if not self._started:
             return
 

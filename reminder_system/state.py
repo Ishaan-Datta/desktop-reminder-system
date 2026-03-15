@@ -27,6 +27,7 @@ class PersistentState:
     """
 
     def __init__(self, state_file: Path):
+        """Initialise the state store and load any persisted values."""
         self.state_file = state_file
         self._data: dict[str, Any] = dict(_DEFAULTS)
         self._lock = threading.Lock()

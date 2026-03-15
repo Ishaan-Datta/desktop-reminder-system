@@ -267,6 +267,7 @@ class ControlButton(QPushButton):
     }
 
     def __init__(self, icon_name: str, label: str, parent=None):
+        """Create a tray control button with a reserved icon column."""
         super().__init__(parent)
         self._icon_name = icon_name
         self._label = label
@@ -303,6 +304,7 @@ class ControlButton(QPushButton):
         self._sync_icon()
 
     def set_content(self, icon_name: str, label: str):
+        """Update both the icon lookup key and the visible button label."""
         self._icon_name = icon_name
         self._label = label
         self._text_label.setText(label)
@@ -310,22 +312,26 @@ class ControlButton(QPushButton):
         self._sync_icon()
 
     def setObjectName(self, name: str):
+        """Keep the embedded text label styling in sync with the object name."""
         super().setObjectName(name)
         if hasattr(self, "_text_label"):
             self._sync_label_appearance()
 
     def changeEvent(self, event):
+        """Refresh the icon when the enabled state changes."""
         super().changeEvent(event)
         if event.type() == QEvent.Type.EnabledChange and hasattr(self, "_icon_label"):
             self._sync_icon()
 
     def _sync_icon(self):
+        """Resolve and display the configured icon for the current button state."""
         icon = _resolve_control_icon(self._icon_name, self.style())
         mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
         pixmap = icon.pixmap(CONTROL_BUTTON_ICON_SIZE, mode)
         self._icon_label.setPixmap(pixmap)
 
     def _sync_label_appearance(self):
+        """Apply the text colour associated with the current button role."""
         color = self._TEXT_COLORS.get(self.objectName(), "#e0e0e0")
 
         font = self.font()
@@ -342,7 +348,7 @@ class TrayWindow(QWidget):
     Three switchable pages:
       0 – Upcoming  : next scheduled reminders sorted by time
       1 – Queue     : currently queued reminders in order
-      2 – Controls  : snooze toggle, clear queue, lock status
+      2 – Controls  : snooze toggle, work-session controls, and lock status
     """
 
     PAGE_UPCOMING = 0
@@ -350,6 +356,7 @@ class TrayWindow(QWidget):
     PAGE_CONTROLS = 2
 
     def __init__(self, app: "ReminderApp", parent=None):
+        """Create the tray panel window for a running reminder app instance."""
         super().__init__(parent)
         self._app = app
         self._current_page = self.PAGE_UPCOMING
@@ -414,6 +421,7 @@ class TrayWindow(QWidget):
     # ── UI setup ─────────────────────────────────────────────────
 
     def _setup_ui(self):
+        """Build the tray header, navigation, and page stack widgets."""
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
@@ -447,6 +455,7 @@ class TrayWindow(QWidget):
     # ── Page builders ────────────────────────────────────────────
 
     def _build_controls_page(self) -> QWidget:
+        """Build the page containing tray toggles and current lock status."""
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 4, 0, 0)
@@ -492,6 +501,7 @@ class TrayWindow(QWidget):
         return page
 
     def _build_upcoming_page(self) -> QWidget:
+        """Build the page that lists upcoming scheduled reminders."""
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 4, 0, 0)
@@ -513,6 +523,7 @@ class TrayWindow(QWidget):
         return page
 
     def _build_queue_page(self) -> QWidget:
+        """Build the page that lists reminders currently waiting in the queue."""
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 4, 0, 0)
@@ -536,12 +547,14 @@ class TrayWindow(QWidget):
     # ── Navigation ───────────────────────────────────────────────
 
     def _switch_page(self, index: int):
+        """Switch the visible tray page and refresh its contents."""
         self._current_page = index
         self._stack.setCurrentIndex(index)
         self._update_nav_style()
         self._refresh_current_page()
 
     def _update_nav_style(self):
+        """Refresh the selected styling for the tray page navigation buttons."""
         for i, btn in enumerate(self._nav_buttons):
             btn.setObjectName("navBtnActive" if i == self._current_page else "navBtn")
             btn.style().unpolish(btn)
@@ -550,6 +563,7 @@ class TrayWindow(QWidget):
     # ── Refresh logic ────────────────────────────────────────────
 
     def _refresh_current_page(self):
+        """Refresh whichever tray page is currently visible."""
         page = self._current_page
         if page == self.PAGE_CONTROLS:
             self._refresh_controls()
@@ -563,6 +577,7 @@ class TrayWindow(QWidget):
         self._refresh_current_page()
 
     def _refresh_controls(self):
+        """Refresh toggle states and textual status shown on the Controls page."""
         # Snooze toggle visual state
         lock_dir = Path(self._app.config_manager.general.lock_dir)
         own_lock = lock_dir / "reminder-system_snooze.lock"
@@ -641,6 +656,7 @@ class TrayWindow(QWidget):
         self._ws_lock_btn.style().polish(self._ws_lock_btn)
 
     def _refresh_upcoming(self):
+        """Rebuild the Upcoming page from the scheduler status snapshot."""
         self._clear_layout(self._upcoming_layout)
 
         status = self._app.scheduler.get_status()
@@ -659,6 +675,7 @@ class TrayWindow(QWidget):
             self._upcoming_layout.insertWidget(i, card)
 
     def _refresh_queue(self):
+        """Rebuild the Queue page from the persistent reminder queue."""
         self._clear_layout(self._queue_layout)
 
         items = self._app._queue.get_all() if self._app._queue else []
@@ -824,14 +841,6 @@ class TrayWindow(QWidget):
 
         self._app._scan_lock_files()
         self._app._update_tray_icon_color()
-        self._refresh_controls()
-
-    def _clear_queue(self):
-        """Clear all queued reminders."""
-        if self._app._queue:
-            count = self._app._queue.size()
-            self._app._queue.clear()
-            print(f"Tray: cleared {count} queued reminder(s)")
         self._refresh_controls()
 
     # ── Visibility ───────────────────────────────────────────────

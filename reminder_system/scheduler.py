@@ -65,6 +65,7 @@ class ReminderScheduler:
     CHECK_INTERVAL = 1.0  # Check every second
 
     def __init__(self):
+        """Initialise the in-memory reminder registry and scheduler state."""
         self.reminders: Dict[str, ScheduledReminder] = {}
         self._running = False
         self._thread: Optional[threading.Thread] = None
