@@ -1,100 +1,106 @@
 # Desktop Reminder System
 
-A beautiful, non-intrusive desktop reminder overlay application for Linux (KDE Plasma 6 compatible).
+A Linux desktop reminder application with a full-screen overlay, cron scheduling, a persistent queue, config hot reload, and a tray control panel.
 
-## Screenshots
+## Features
 
-The overlay appears in the center of your screen with:
-- Your custom PNG icon fading in
-- Background gradually darkening
-- Two buttons: ✓ (Complete) and ⏰ (Snooze)
+- Transparent reminder overlay with complete and snooze actions
+- Multiple cron schedules per reminder
+- Persistent queue and persistent runtime state across restarts
+- Lock-file based pause/cancel controls
+- Work-session automation with manual tray overrides
+- Config hot reload for reminder schedules and overlay appearance
+- Tray window with Upcoming, Queue, and Controls pages
+- Wayland-aware tray integration through StatusNotifierItem
+- Nix flake and uv-based development workflow
 
 ## Installation
 
-### NixOS / Nix (Recommended)
+If you use `direnv` and `nix-direnv` packages on your system the `.envrc` and flake `devShell` hooks will setup everything, or manually:
 
 ```bash
-# Enter development shell
 nix develop
-
-# Sync dependencies with uv
 uv sync
-
-# Run the application
 uv run python run.py
-
-# Or run tests
-uv run python -m tests.manual_trigger
 ```
 
 ## Configuration
 
-Configuration is stored in `~/.config/reminder-system/config.toml`
+The application reads [config.toml](example_config/config.toml) from `~/.config/reminder-system/config.toml`.
 
-### Setup
-
-```bash
-# Create the config directory
-mkdir -p ~/.config/reminder-system
-
-# Copy example config
-cp example_config/config.toml ~/.config/reminder-system/
-
-# Add your icon files to the same directory
-cp your-icons/*.png ~/.config/reminder-system/
-```
-
-### Config Format
+### Reminder format
 
 ```toml
-[alarm_name]
-schedule = "cron expression"
-icon = "icon_filename.png"
-snooze_duration = 300  # seconds
-```
-
-### Example Configuration
-
-```toml
-# Water break every hour
-[water_break]
-schedule = "0 * * * *"
+[my_reminder]
+schedule = ["0 * * * *", "30 9-17 * * 1-5"]
 icon = "water.png"
 snooze_duration = 300
-
-
-# Stretch break every 30 minutes during work hours
-[stretch_break]
-schedule = "*/30 9-17 * * 1-5"
-icon = "stretch.png"
-snooze_duration = 600
-
-# Eye rest every 20 minutes (20-20-20 rule)
-[eye_rest]
-schedule = "*/20 * * * *"
-icon = "eye.png"
-snooze_duration = 120
+text = "Time to drink some water"
 ```
+
+### General settings
+
+The optional `[general]` section supports:
+
+- `text_font`
+- `text_size`
+- `icon_scale`
+- `max_opacity`
+- `fade_in_duration`
+- `fade_out_duration`
+- `lock_dir`
+- `stagger_interval`
+- `resume_interval`
+- `work_session_enable`
+- `work_session_start`
+- `work_session_end`
+
+See [example_config/config.toml](example_config/config.toml) for the current complete sample.
 
 ## Usage
-### Run on startup
-#### Option 2: Systemd user service
+
+### Run the app
 
 ```bash
-# Copy service file
-cp reminder-system.service ~/.config/systemd/user/
-
-# Enable and start
-systemctl --user enable reminder-system
-systemctl --user start reminder-system
-
-# Check status
-systemctl --user status reminder-system
+uv run python run.py
 ```
 
-## Keyboard Shortcuts
+You can also run the package entry point:
 
-When the overlay is active:
-- **Enter** - Mark reminder as complete
-- **Escape** - Snooze reminder
+```bash
+uv run reminder-system
+```
+
+### Keyboard shortcuts
+
+When the overlay is visible:
+
+- `Enter`: complete the reminder
+- `Escape`: snooze the reminder
+
+## Tray behavior
+
+### Left-click tray window
+
+The tray window exposes three pages:
+
+- `Upcoming`: next scheduled reminders
+- `Queue`: currently queued reminders
+- `Controls`: snooze lock, work-session mode, and work-session lock
+
+## Hot reload
+
+Editing the config file reloads:
+
+- reminder schedules
+- general overlay appearance settings
+- the active reminder content when that reminder still exists after reload
+- tray status derived from the updated config and lock directory
+
+## Testing
+
+- [tests/manual_trigger.py](tests/manual_trigger.py): display a single reminder from fixture or example config
+- [tests/manual_trigger_overlap.py](tests/manual_trigger_overlap.py): stress queueing and lock behavior
+- [tests/manual_tray.py](tests/manual_tray.py): exercise tray controls and the tray panel
+- [tests/run_with_fixtures.py](tests/run_with_fixtures.py): run the full app with fixture config
 
