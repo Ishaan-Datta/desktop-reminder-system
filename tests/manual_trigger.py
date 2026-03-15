@@ -132,7 +132,7 @@ def main():
     print(f"  Fade-out: {general_config.fade_out_duration}ms")
     print("-" * 50)
     print("The overlay will appear shortly.")
-    print("Click ✓ to complete or ⏰ to snooze.")
+    print("Click ✓ to complete or ⏳ to snooze.")
     print("Press Ctrl+C to cancel.")
     print("=" * 50)
 

@@ -163,7 +163,9 @@ class TestGeneralConfig:
         assert config.text_size == 24
         assert config.icon_scale == 1.0
 
-    """Tests for parse_config_data function."""
+
+class TestParseConfigData:
+    """Tests for parse_config_data."""
 
     def test_parse_multiple_reminders(self):
         """Test parsing multiple reminders."""
