@@ -9,7 +9,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = ["PyQt6>=6.4.0", "croniter>=1.3.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0.0"]
+dev = ["pytest>=9.0.3"]
 
 [project.scripts]
 reminder-system = "reminder_system.app:main"
@@ -18,4 +18,4 @@ reminder-system = "reminder_system.app:main"
 where = ["."]
 
 [dependency-groups]
-dev = ["pytest>=7.0.0"]
+dev = ["pytest>=9.0.3"]
